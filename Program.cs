@@ -7,8 +7,6 @@ using MessageServer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
 
-Dictionary<string, Client> ActiveClients = new Dictionary<string, Client>();
-Dictionary<string, string> PassworDataBase = new Dictionary<string, string>();
 List<Message> NeedToSendMessages = new List<Message>();
 
 
@@ -21,9 +19,6 @@ builder.Services.AddDbContext<ApplicationContext>(options => options.UseNpgsql(c
 
 var app = builder.Build();
 
-
-app.UseDefaultFiles();
-app.UseStaticFiles();
 
 /*TimerCallback tm = new TimerCallback(Distribution);
 Timer timer = new Timer(tm, null, 0, 10000);*/
@@ -40,7 +35,7 @@ app.Map("/getkey", async (context) => {
 }); //отправляет открытый ключ
 
 app.Map("/getactiveclients", GetActiveClients); //получения списка активных клиентов, без шифрования
-app.Map("/getmessages", GetMessages); //получение сообщений по токену, должна быть рассшифровка
+//app.Map("/getmessages", GetMessages); //получение сообщений по токену, должна быть рассшифровка
 app.MapGet("/api/users", async (ApplicationContext db) => await db.Users.ToListAsync());
 app.MapGet("/api/users1", async (ApplicationContext db) => {
     db.Database.EnsureDeleted();
@@ -55,23 +50,35 @@ app.MapPost("/authorization", async (ApplicationContext db, HttpContext context)
 {
     await _Authorization(db, context.Response, context.Request, publickey, privatekey);
 });
+
+app.MapPost("/sendmessage", async (ApplicationContext db, HttpContext context) =>
+{
+    string Sender = context.Request.Query["Sender"];
+    await _SendMessages(db, context.Response, context.Request, Sender);
+});
+app.MapGet("/getmessages", async (ApplicationContext db, HttpContext context) =>
+{
+    await _GetMessages(db, context.Response, context.Request, publickey, privatekey);
+});
+app.MapGet("/getuserkey", async (ApplicationContext db, HttpContext context) =>
+{
+    string Recipient = context.Request.Query["Recipient"];
+    Datacell? user = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(Recipient));
+
+    // если не найден, отправляем статусный код и сообщение об ошибке
+    if (user == null) return Results.NotFound(new { message = "Пользователь не найден" });
+    if (user.keyValid == 0) return Results.NotFound(new { message = "Recipient key is invalid" });
+    // если пользователь найден, отправляем его
+    return Results.Json(new {openkey =  user.OpenKey });
+});
 app.Run();
 
 void GetActiveClients(IApplicationBuilder appBuilder)
 {
     appBuilder.Run(async context => await _GetActiveClients(context.Response));
 }
-void GetMessages(IApplicationBuilder appBuilder)
-{
 
-    appBuilder.Run(async context => {
-        string Recipient = context.Request.Query["Recipient"];
-        await _GetMessages(context.Response, context.Request, ActiveClients.GetValueOrDefault(Recipient));
-    });
-}
-
-
-void Distribution(object? state)
+/*void Distribution(object? state)
 {
     foreach (var message in NeedToSendMessages)
     {
@@ -80,13 +87,13 @@ void Distribution(object? state)
 
         }
     }
-}
+}*/
 
 
 
 async Task _GetActiveClients(HttpResponse response)
 {
-    await response.WriteAsJsonAsync(ActiveClients);
+    //await response.WriteAsJsonAsync(ActiveClients);
 }
 async Task _Registration(ApplicationContext db, HttpResponse response, HttpRequest request, string _publicKey, string _privateKey)
 {
@@ -150,39 +157,89 @@ async Task _Authorization(ApplicationContext db, HttpResponse response, HttpRequ
         await response.WriteAsJsonAsync(new { message = e.Message });
     }
 }
-async Task _GetMessages(HttpResponse response, HttpRequest request, Client? user)
+async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpRequest request, string _sender)
 {
     try
     {
-        if (user == null)
+        Datacell? sender = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(_sender));
+        if (sender == null)
         {
-            await response.WriteAsJsonAsync(new { });
+            throw new Exception("Unknown sender");
         }
-        else
-        {
-            response.ContentType = "text/html; charset=utf-8";
+        var jsonoptions = new JsonSerializerOptions();
+        jsonoptions.Converters.Add(new MessageConverter());
+        var message = await request.ReadFromJsonAsync<Message>(jsonoptions);
 
-            var stringBuilder = new StringBuilder();
-            foreach (var message in user.NeedToGetMessages)
-            {
-                stringBuilder.Append("From: " + message.Sender + "|" + message.Text);
-            }
-            await response.WriteAsync(stringBuilder.ToString());
+        if (!checkHashCode(sender.Token, message.Text, message.hashkey))
+        {
+            throw new Exception("you are not sender");
         }
+        Datacell? getter = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Recipient));
+
+        if (getter == null)
+        {
+            throw new Exception("Unknown Recipient");
+        }
+        if (getter.keyValid == 0)
+        {
+            throw new Exception("Recipient key is invalid");
+        }
+
+        getter.NeedToGetMessages.Add(message);
+        await db.SaveChangesAsync();
+        await response.WriteAsJsonAsync(new { message = "Message sended" });
     }
     catch (Exception e)
     {
         response.StatusCode = 400;
         await response.WriteAsJsonAsync(new { message = e.Message });
     }
-
-    await response.WriteAsJsonAsync(ActiveClients);
 }
 
 
+async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpRequest request, string _publicKey, string _privateKey)
+{
+    try
+    {
+        string Recipient = request.Query["Recipient"];
+        DecodeEncode decodeEncode = new DecodeEncode(_publicKey, _privateKey);
+        string _Recipient = decodeEncode.decript(Recipient);
+
+        Datacell? getter = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(_Recipient));
+        if (getter == null)
+        {
+            throw new Exception("Unknown Recipient");
+        }
+        StringBuilder messages = new StringBuilder();
+
+        while(getter.NeedToGetMessages.Count()>0)
+        {
+            var message = getter.NeedToGetMessages[0];
+            Datacell? sender = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Sender));
+            messages.Append(message.DateTime+"|"+message.Sender+"|"+message.Text);
+            if (sender != null)
+            {
+                sender.SendedMessages.Add(message.hashkey);
+            }
+            getter.NeedToGetMessages.RemoveAt(0);
+            messages.Append("#");
+            await db.SaveChangesAsync();
+        }
+        await response.WriteAsJsonAsync(new { gettedmessages = messages.ToString().TrimEnd('#') });
+    }
+    catch (Exception e)
+    {
+        response.StatusCode = 400;
+        await response.WriteAsJsonAsync(new { message = e.Message });
+    }
+}
 
 
-
+bool checkHashCode(string token, string text, string hash)
+{
+    string _hash = DecodeEncode.CreateMD5(token+text);
+    return hash.Equals(_hash);  
+}
 
 public class Client
 {
@@ -207,13 +264,16 @@ public class Message
     public string Sender { get; set; } //кто отправил
     public string Recipient { get; set; } //кто получит
     public string Text { get; set; }
+    public string hashkey { get; set; }
     public DateTime DateTime { get; set; }
 
-    public Message(string sender, string recipient, string text)
+    public Message(string sender, string recipient, string text, string hash, DateTime time)
     {
         Sender = sender;
         Recipient = recipient;
         Text = text;
+        hashkey = hash;
+        DateTime = time;
     }
 
 }
@@ -225,7 +285,8 @@ public class Datacell
     public string Password { get; set; }
     public string OpenKey { get; set; }
     public int keyValid { get; set; }
-
+    public List<Message> NeedToGetMessages = new List<Message>();
+    public List<string> SendedMessages = new List<string>();
     /*public Datacell(string id, string name, string password, string openKey, int keyvalid)
     {
         Id = id;
