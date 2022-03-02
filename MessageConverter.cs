@@ -41,7 +41,7 @@ namespace MessageServer
             }
 
             //return new Message(Sender, Recipient, messageText, hash, DateTime.Now);
-            return new Message {Sender = Sender, Recipient = Recipient, Text = messageText, DateTime = DateTime.Now.ToString(), hashkey = hash};//  isDelivered = false, isLosted = false, isSended = false, isViewed = false,
+            return new Message {Sender = Sender, Recipient = Recipient, Text = messageText, DateTime = DateTime.Now.ToString(), hashkey = hash};
 
         }
         // сериализуем объект Person в json
