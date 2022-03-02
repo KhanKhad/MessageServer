@@ -5,6 +5,7 @@ namespace MessageServer
     public class ApplicationContext : DbContext
     {
         public DbSet<Datacell> Users { get; set; } = null!;
+        public DbSet<Message> Messages { get; set; } = null!;
         public ApplicationContext(DbContextOptions<ApplicationContext> options)
             : base(options)
         {

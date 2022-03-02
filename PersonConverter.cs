@@ -20,7 +20,7 @@ namespace MessageServer
         {
             var personName = "Undefined";
             var OpenKey = "";
-            var pass = "";
+            string pass = null;
             while (reader.Read())
             {
                 if (reader.TokenType == JsonTokenType.PropertyName)
@@ -43,9 +43,12 @@ namespace MessageServer
             }
 
             string clientname;
-            string clientpass; ;
+            string clientpass = "";
             clientname = _DecodeEncode.decript(personName);
-            clientpass = _DecodeEncode.decript(pass);
+            if (pass != null)
+            {
+                clientpass = _DecodeEncode.decript(pass);
+            }
             return new Client(clientname, OpenKey, clientpass);
         }
         // сериализуем объект Person в json

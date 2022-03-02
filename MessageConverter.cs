@@ -13,7 +13,7 @@ namespace MessageServer
         {
             var messageText = "Undefined";
             var Sender = "";
-            var Getter = "";
+            var Recipient = "";
             var hash = "";
             DateTime time;
 
@@ -28,8 +28,8 @@ namespace MessageServer
                         case "Sender" or "sender" when reader.TokenType == JsonTokenType.String:
                             Sender = reader.GetString();
                             break;
-                        case "Getter" or "getter" when reader.TokenType == JsonTokenType.String:
-                            Getter = reader.GetString();
+                        case "Recipient" or "recipient" when reader.TokenType == JsonTokenType.String:
+                            Recipient = reader.GetString();
                             break;
                         case "Hash" or "hash" when reader.TokenType == JsonTokenType.String:
                             hash = reader.GetString();
@@ -41,7 +41,9 @@ namespace MessageServer
                 }
             }
 
-            return new Message(Sender, Getter, messageText, hash, DateTime.Now);
+            //return new Message(Sender, Recipient, messageText, hash, DateTime.Now);
+            return new Message {Sender = Sender, Recipient = Recipient, Text = messageText, hashkey = hash, DateTime = DateTime.Now, isDelivered = false, isLosted = false, isSended = false, isViewed = false, Id = Guid.NewGuid().ToString()};//
+
         }
         // сериализуем объект Person в json
         public override void Write(Utf8JsonWriter writer, Message message, JsonSerializerOptions options)

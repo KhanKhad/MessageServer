@@ -121,7 +121,7 @@ namespace MessageServer
         }
         public static byte[] StringToBytes(string toEncrypt)
         {
-            var a = toEncrypt.Split(":");
+            var a = toEncrypt.Split("|");
             byte[] b = new byte[a.Length];
             for (int i = 0; i < a.Length; i++)
             {
@@ -134,9 +134,9 @@ namespace MessageServer
             string a = "";
             foreach (byte b in decrypted)
             {
-                a += b + ":";
+                a += b + "|";
             }
-            return a.TrimEnd(':');
+            return a.TrimEnd('|');
         }
         public static string CreateMD5(string input)
         {

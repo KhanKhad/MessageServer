@@ -37,6 +37,7 @@ app.Map("/getkey", async (context) => {
 app.Map("/getactiveclients", GetActiveClients); //получения списка активных клиентов, без шифрования
 //app.Map("/getmessages", GetMessages); //получение сообщений по токену, должна быть рассшифровка
 app.MapGet("/api/users", async (ApplicationContext db) => await db.Users.ToListAsync());
+app.MapGet("/api/user", async (ApplicationContext db) => await db.Messages.ToListAsync());
 app.MapGet("/api/users1", async (ApplicationContext db) => {
     db.Database.EnsureDeleted();
     db.SaveChanges();
@@ -53,8 +54,9 @@ app.MapPost("/authorization", async (ApplicationContext db, HttpContext context)
 
 app.MapPost("/sendmessage", async (ApplicationContext db, HttpContext context) =>
 {
-    string Sender = context.Request.Query["Sender"];
-    await _SendMessages(db, context.Response, context.Request, Sender);
+    //string Sender = context.Request.Query["Sender"];
+    //await _SendMessages(db, context.Response, context.Request, Sender);
+    await _SendMessages(db, context.Response, context.Request);
 });
 app.MapGet("/getmessages", async (ApplicationContext db, HttpContext context) =>
 {
@@ -109,7 +111,7 @@ async Task _Registration(ApplicationContext db, HttpResponse response, HttpReque
             {
                 throw new Exception("Already Exist");
             }
-            db.Users.Add(new Datacell { Name = DecodeEncode.CreateMD5(user.Name), Token = user.Token, Password = DecodeEncode.CreateMD5(user.Password), OpenKey = user.OpenKey, keyValid = 3 });
+            db.Users.Add(new Datacell { Name = DecodeEncode.CreateMD5(user.Name), Token = user.Token, Password = DecodeEncode.CreateMD5(user.Password), OpenKey = user.OpenKey, keyValid = 3, GettedMessages = "null", SendedMessages = "null" });
             db.SaveChanges();
             await response.WriteAsJsonAsync(user, jsonoptions);
         }
@@ -157,37 +159,61 @@ async Task _Authorization(ApplicationContext db, HttpResponse response, HttpRequ
         await response.WriteAsJsonAsync(new { message = e.Message });
     }
 }
-async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpRequest request, string _sender)
+async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpRequest request)
 {
     try
     {
-        Datacell? sender = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(_sender));
+        var jsonoptions = new JsonSerializerOptions();
+        jsonoptions.Converters.Add(new MessageConverter());
+        Message? message = await request.ReadFromJsonAsync<Message>(jsonoptions);
+
+        Datacell? sender = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Sender));
+
         if (sender == null)
         {
             throw new Exception("Unknown sender");
         }
-        var jsonoptions = new JsonSerializerOptions();
-        jsonoptions.Converters.Add(new MessageConverter());
-        var message = await request.ReadFromJsonAsync<Message>(jsonoptions);
 
         if (!checkHashCode(sender.Token, message.Text, message.hashkey))
         {
             throw new Exception("you are not sender");
         }
-        Datacell? getter = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Recipient));
+        Datacell? Recipient = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Recipient));
 
-        if (getter == null)
+        if (Recipient == null)
         {
             throw new Exception("Unknown Recipient");
         }
-        if (getter.keyValid == 0)
+        if (Recipient.keyValid == 0)
         {
             throw new Exception("Recipient key is invalid");
         }
-
-        getter.NeedToGetMessages.Add(message);
         await db.SaveChangesAsync();
-        await response.WriteAsJsonAsync(new { message = "Message sended" });
+        string? gettedMessage;
+        gettedMessage = Recipient.GettedMessages;
+        
+        if (gettedMessage.Equals("null"))
+        {
+            db.Messages.Add(message);
+            Recipient.GettedMessages = message.Id;
+            await db.SaveChangesAsync();
+            await response.WriteAsJsonAsync(new { message = "Message sended" });
+        }
+        else
+        {
+            Message? _message;
+            do
+            {
+                _message = await db.Messages.FirstOrDefaultAsync(u => u.Id == gettedMessage);
+                gettedMessage = _message.nextMessage;
+            }
+            while (!gettedMessage.Equals(""));
+            db.Messages.Add(message);
+            _message.nextMessage = message.Id;
+            await db.SaveChangesAsync();
+            await response.WriteAsJsonAsync(new { message = "Message sended" });
+        }
+        
     }
     catch (Exception e)
     {
@@ -201,29 +227,69 @@ async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpReques
 {
     try
     {
-        string Recipient = request.Query["Recipient"];
+        /*string _recipient = request.Query["Recipient"];
+        string RecipientKey = request.Query["RecipientKey"];
         DecodeEncode decodeEncode = new DecodeEncode(_publicKey, _privateKey);
-        string _Recipient = decodeEncode.decript(Recipient);
+        string _Recipient = decodeEncode.decript(_recipient);
+         */
+        var jsonoptions = new JsonSerializerOptions();
+        jsonoptions.Converters.Add(new PersonConverter(_publicKey, _privateKey));
+        var client = await request.ReadFromJsonAsync<Client>(jsonoptions);
 
-        Datacell? getter = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(_Recipient));
-        if (getter == null)
+        if (client.Name == null || client.OpenKey == null)
+        {
+            throw new Exception("Unknown Recipient, name || openkey == null");
+        }
+
+        string _Recipient = client.Name;
+        string RecipientKey = client.OpenKey;
+
+        Datacell? Recipient = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(_Recipient));
+        
+        if (Recipient == null)
         {
             throw new Exception("Unknown Recipient");
         }
+
+        if (!client.OpenKey.Equals(Recipient.OpenKey))
+        {
+            throw new Exception("You key need to update");
+        }
+
         StringBuilder messages = new StringBuilder();
 
-        while(getter.NeedToGetMessages.Count()>0)
+        while(Recipient.GettedMessages != null)
         {
-            var message = getter.NeedToGetMessages[0];
-            Datacell? sender = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Sender));
-            messages.Append(message.DateTime+"|"+message.Sender+"|"+message.Text);
-            if (sender != null)
+            Message? message = await db.Messages.FirstOrDefaultAsync(u => u.Id == Recipient.GettedMessages);
+            if (message == null)
             {
-                sender.SendedMessages.Add(message.hashkey);
+                throw new Exception("You messages is already deleted");
             }
-            getter.NeedToGetMessages.RemoveAt(0);
-            messages.Append("#");
+            Datacell? sender = await db.Users.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Sender));
+
+            if (Recipient.OpenKey.Equals(RecipientKey))
+            {
+                if (!message.isSended)
+                {
+                    messages.Append(message.DateTime + "|" + message.Sender + "|" + message.Text + "#");
+                    if (sender != null)
+                    {
+                        message.isSended = true;
+                        //sender.SendedMessages.Add(message.hashkey);
+                    }
+                }
+            }
+            else
+            {
+                if (sender != null)
+                {
+                    message.isLosted = true;
+                    //sender.NotSendedMessages.Add(message.hashkey);
+                }
+            }
+            Recipient.GettedMessages = message.nextMessage;
             await db.SaveChangesAsync();
+            Console.WriteLine(messages.ToString() + "\n" + "\n");
         }
         await response.WriteAsJsonAsync(new { gettedmessages = messages.ToString().TrimEnd('#') });
     }
@@ -234,6 +300,10 @@ async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpReques
     }
 }
 
+void GetFirstMessage (Datacell client)
+{
+
+}
 
 bool checkHashCode(string token, string text, string hash)
 {
@@ -261,20 +331,26 @@ public class Client
 }
 public class Message
 {
-    public string Sender { get; set; } //кто отправил
-    public string Recipient { get; set; } //кто получит
+    public string Id { get; set; }
+    public string Sender { get; set; }
+    public string Recipient { get; set; }
     public string Text { get; set; }
     public string hashkey { get; set; }
+    public string nextMessage { get; set; }
+    public bool isLosted { get; set; }
+    public bool isSended { get; set; }
+    public bool isDelivered { get; set; }
+    public bool isViewed { get; set; }
     public DateTime DateTime { get; set; }
 
-    public Message(string sender, string recipient, string text, string hash, DateTime time)
+   /*public Message(string sender, string recipient, string text, string hash, DateTime time)
     {
         Sender = sender;
         Recipient = recipient;
         Text = text;
         hashkey = hash;
         DateTime = time;
-    }
+    }*/
 
 }
 public class Datacell
@@ -285,8 +361,8 @@ public class Datacell
     public string Password { get; set; }
     public string OpenKey { get; set; }
     public int keyValid { get; set; }
-    public List<Message> NeedToGetMessages = new List<Message>();
-    public List<string> SendedMessages = new List<string>();
+    public string GettedMessages { get; set; }
+    public string SendedMessages { get; set; }
     /*public Datacell(string id, string name, string password, string openKey, int keyvalid)
     {
         Id = id;
