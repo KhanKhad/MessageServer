@@ -15,7 +15,6 @@ namespace MessageServer
             var Sender = "";
             var Recipient = "";
             var hash = "";
-            DateTime time;
 
             while (reader.Read())
             {
@@ -42,7 +41,7 @@ namespace MessageServer
             }
 
             //return new Message(Sender, Recipient, messageText, hash, DateTime.Now);
-            return new Message {Sender = Sender, Recipient = Recipient, Text = messageText, hashkey = hash, DateTime = DateTime.Now, isDelivered = false, isLosted = false, isSended = false, isViewed = false, Id = Guid.NewGuid().ToString()};//
+            return new Message {Id = Guid.NewGuid().ToString(), Sender = Sender, Recipient = Recipient, Text = messageText, DateTime = DateTime.Now.ToString(), hashkey = hash};//  isDelivered = false, isLosted = false, isSended = false, isViewed = false,
 
         }
         // сериализуем объект Person в json
