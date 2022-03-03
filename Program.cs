@@ -34,10 +34,9 @@ app.Map("/getkey", async (context) => {
     await response.WriteAsJsonAsync(new { openKey = responseText });
 }); //отправляет открытый ключ
 
-app.Map("/getactiveclients", GetActiveClients); //получения списка активных клиентов, без шифрования
 app.MapGet("/api/users", async (ApplicationContext db) => await db.UserDB.ToListAsync());
 app.MapGet("/api/user", async (ApplicationContext db) => await db.MessageDB.ToListAsync());
-app.MapGet("/api/users1", async (ApplicationContext db) => {
+app.MapGet("/api/users1", (ApplicationContext db) => {
     db.Database.EnsureDeleted();
     db.SaveChanges();
 });
@@ -61,6 +60,10 @@ app.MapPost("/getmessages", async (ApplicationContext db, HttpContext context) =
 {
     await _GetMessages(db, context.Response, context.Request, publickey, privatekey);
 });
+app.MapPost("/checkMessagesInfo", async (ApplicationContext db, HttpContext context) =>
+{
+    await _CheckMessages(db, context.Response, context.Request, publickey, privatekey);
+});
 app.MapGet("/getuserkey", async (ApplicationContext db, HttpContext context) =>
 {
     string Recipient = context.Request.Query["Recipient"];
@@ -74,10 +77,6 @@ app.MapGet("/getuserkey", async (ApplicationContext db, HttpContext context) =>
 });
 app.Run();
 
-void GetActiveClients(IApplicationBuilder appBuilder)
-{
-    appBuilder.Run(async context => await _GetActiveClients(context.Response));
-}
 
 /*void Distribution(object? state)
 {
@@ -92,10 +91,7 @@ void GetActiveClients(IApplicationBuilder appBuilder)
 
 
 
-async Task _GetActiveClients(HttpResponse response)
-{
-    //await response.WriteAsJsonAsync(ActiveClients);
-}
+
 async Task _Registration(ApplicationContext db, HttpResponse response, HttpRequest request, string _publicKey, string _privateKey)
 {
     try
@@ -189,35 +185,36 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
         {
             throw new Exception("Recipient key is invalid");
         }
-        string newId = getid();
-        string? gettedMessage;
-        gettedMessage = Recipient.GettedMessages;
 
-        db.MessageDB.Add(new Message {Id =newId, Sender = message.Sender, Recipient = message.Recipient, Text = message.Text, hashkey = message.hashkey, nextGettedMessage = "sd",nextSendedMessage = "sd", DateTime = message.DateTime, isDelivered =false, isLosted = false, isSended = false, isViewed = false});
-        await db.SaveChangesAsync();
+        string newId = getid();
+        string? gettedMessage = Recipient.GettedMessages;
+        string? sendedMessage = sender.SendedMessages;
 
         if (gettedMessage.Equals("sd"))
         {
             Recipient.GettedMessages = newId;
-            await addSendedMessage(db, sender.Id, newId);
-            await db.SaveChangesAsync();
-            await response.WriteAsJsonAsync(new { message = "Message sended" });
         }
         else
         {
-            Message? _message;
-            do
-            {
-                _message = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == gettedMessage);
-                gettedMessage = _message.nextGettedMessage;
-            }
-            while (!gettedMessage.Equals("sd"));
-            _message.nextGettedMessage = newId;
-            await addSendedMessage(db, sender.Id, newId);
-            await db.SaveChangesAsync();
-            await response.WriteAsJsonAsync(new { message = "Message sended" });
+            Message? _message = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == gettedMessage);
+            _message.lastGettedMessage = newId;
+            Recipient.GettedMessages = newId;
         }
-        
+        await db.SaveChangesAsync();
+        if (sendedMessage.Equals("sd"))
+        {
+            sender.SendedMessages = newId;
+        }
+        else
+        {
+            Message? _message = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == sendedMessage);
+            _message.lastSendedMessage = newId;
+            sender.SendedMessages = newId;
+        }
+        await db.SaveChangesAsync();
+        db.MessageDB.Add(new Message { Id = newId, Sender = message.Sender, Recipient = message.Recipient, Text = message.Text, hashkey = message.hashkey, nextGettedMessage = gettedMessage, nextSendedMessage = sendedMessage, lastGettedMessage = "sd", lastSendedMessage = "sd", DateTime = message.DateTime, isDelivered = false, isLosted = false, isSended = false, isViewed = false });
+        await db.SaveChangesAsync();
+        await response.WriteAsJsonAsync(new { message = "Message sended" });
     }
     catch (Exception e)
     {
@@ -227,9 +224,8 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
 }
 
 
-async Task addSendedMessage (ApplicationContext db, int senderId, string sendedMessageId)
+async Task addSendedMessage (ApplicationContext db, Datacell? sender, string sendedMessageId)
 {
-    Datacell? sender = await db.UserDB.FirstOrDefaultAsync(u => u.Id == senderId);
     if (sender.SendedMessages.Equals("sd"))
     {
         sender.SendedMessages = sendedMessageId;
@@ -246,6 +242,7 @@ async Task addSendedMessage (ApplicationContext db, int senderId, string sendedM
             gettedMessage = _message.nextSendedMessage;
         }
         while (!gettedMessage.Equals("sd"));
+        Message? sendedmessage = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == sendedMessageId);
         _message.nextSendedMessage = sendedMessageId;
         await db.SaveChangesAsync();
     }
@@ -256,11 +253,6 @@ async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpReques
 {
     try
     {
-        /*string _recipient = request.Query["Recipient"];
-        string RecipientKey = request.Query["RecipientKey"];
-        DecodeEncode decodeEncode = new DecodeEncode(_publicKey, _privateKey);
-        string _Recipient = decodeEncode.decript(_recipient);
-         */
         var jsonoptions = new JsonSerializerOptions();
         jsonoptions.Converters.Add(new PersonConverter(_publicKey, _privateKey));
         var client = await request.ReadFromJsonAsync<Client>(jsonoptions);
@@ -297,11 +289,10 @@ async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpReques
             {
                 if (!message.isSended)
                 {
-                    messages.Append(message.DateTime + "|" + message.Sender + "|" + message.Text + "#");//
+                    messages.Append(message.DateTime + "|" + message.Sender + "|" + message.Text + "#");
                     if (sender != null)
                     {
                         message.isSended = true;
-                        //sender.SendedMessages.Add(message.hashkey);
                     }
                 }
             }
@@ -311,7 +302,6 @@ async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpReques
                 {
                     message.isLosted = true;
                     messages.Append("Message losted" + "#");
-                    //sender.NotSendedMessages.Add(message.hashkey);
                 }
             }
             checkMessages = message.nextGettedMessage;
@@ -350,15 +340,12 @@ async Task _CheckMessages(ApplicationContext db, HttpResponse response, HttpRequ
         }
 
         StringBuilder messages = new StringBuilder();
-        string lastGettedMessage = Sender.GettedMessages;
         string lastSendedMessage = Sender.SendedMessages;
         string checkSendedMessages = Sender.SendedMessages;
-        string checkGettedMessages = Sender.GettedMessages;
 
         while (!checkSendedMessages.Equals("sd"))
         {
             Message? Sendedmessage = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == checkSendedMessages);
-            Message? Gettedmessage = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == checkGettedMessages);
 
             if (Sendedmessage == null)
             {
@@ -366,33 +353,7 @@ async Task _CheckMessages(ApplicationContext db, HttpResponse response, HttpRequ
             }
 
             messages.Append(Sendedmessage.hashkey + "|" + Sendedmessage.isSended + "|" + Sendedmessage.isDelivered + "|" + Sendedmessage.isViewed + "|" + Sendedmessage.isLosted + "#");
-
-            if (Sendedmessage.isLosted || Sendedmessage.isViewed)
-            {
-                Message? _lastSendededMessage = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == lastSendedMessage);
-                _lastSendededMessage.nextSendedMessage = Sendedmessage.nextSendedMessage;
-                db.MessageDB.Remove(Sendedmessage);
-                await db.SaveChangesAsync();
-            }
-            else
-            {
-                lastSendedMessage = checkSendedMessages;
-                checkSendedMessages = Sendedmessage.nextSendedMessage;
-            }
-
-            if (Gettedmessage.isLosted || Gettedmessage.isViewed)
-            {
-                Message? _lastGettedMessage = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == lastGettedMessage);
-                _lastGettedMessage.nextGettedMessage = Gettedmessage.nextGettedMessage;
-                db.MessageDB.Remove(Gettedmessage);
-                await db.SaveChangesAsync();
-            }
-            else
-            {
-                lastGettedMessage = checkGettedMessages;
-                checkGettedMessages = Gettedmessage.nextSendedMessage;
-            }
-            await db.SaveChangesAsync();
+            checkSendedMessages = Sendedmessage.nextSendedMessage;
         }
         await response.WriteAsJsonAsync(new { gettedmessages = messages.ToString().TrimEnd('#') });
     }
@@ -403,6 +364,34 @@ async Task _CheckMessages(ApplicationContext db, HttpResponse response, HttpRequ
     }
 }
 
+async Task _MessageDelete(ApplicationContext db, string startId)
+{
+    try
+    {
+        Message? _startMessage = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == startId);
+
+        string lastSendedMessage = _startMessage.nextSendedMessage;
+        string SendedMessages = _startMessage.nextSendedMessage;
+        string lastGettedMessage = _startMessage.nextSendedMessage;
+        string GettedMessages = _startMessage.nextSendedMessage;
+
+        if (!SendedMessages.Equals(""))
+        {
+            lastSendedMessage = SendedMessages;
+            Message? _SendedMessages = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == SendedMessages);
+            Message? _GettedMessages = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == GettedMessages);
+            if (_SendedMessages.isLosted || _SendedMessages.isViewed)
+            {
+
+            }
+
+        }
+    }
+    catch (Exception e)
+    {
+        
+    }
+}
 
 string getid()
 {
@@ -441,7 +430,9 @@ public class Message
     public string Text { get; set; }
     public string hashkey { get; set; }
     public string nextGettedMessage { get; set; }
+    public string lastGettedMessage { get; set; }
     public string nextSendedMessage { get; set; }
+    public string lastSendedMessage { get; set; }
     public bool isLosted { get; set; }
     public bool isSended { get; set; }
     public bool isDelivered { get; set; }
