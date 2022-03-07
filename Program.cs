@@ -35,16 +35,20 @@ app.Map("/getkey", async (context) => {
 }); //отправляет открытый ключ
 
 app.MapGet("/api/users", async (ApplicationContext db) => await db.UserDB.ToListAsync());
+
 app.MapGet("/api/user", async (ApplicationContext db) => await db.MessageDB.ToListAsync());
+
 app.MapGet("/api/users1", (ApplicationContext db) => {
     db.Database.EnsureDeleted();
     db.SaveChanges();
 });
+
 app.MapPost("/registration", async (ApplicationContext db, HttpContext context) =>
 {
     // добавляем пользователя в массив
     await _Registration(db, context.Response, context.Request, publickey, privatekey);
 });
+
 app.MapPost("/authorization", async (ApplicationContext db, HttpContext context) =>
 {
     await _Authorization(db, context.Response, context.Request, publickey, privatekey);
@@ -52,18 +56,19 @@ app.MapPost("/authorization", async (ApplicationContext db, HttpContext context)
 
 app.MapPost("/sendmessage", async (ApplicationContext db, HttpContext context) =>
 {
-    //string Sender = context.Request.Query["Sender"];
-    //await _SendMessages(db, context.Response, context.Request, Sender);
     await _SendMessages(db, context.Response, context.Request);
 });
+
 app.MapPost("/getmessages", async (ApplicationContext db, HttpContext context) =>
 {
     await _GetMessages(db, context.Response, context.Request, publickey, privatekey);
 });
+
 app.MapPost("/checkMessagesInfo", async (ApplicationContext db, HttpContext context) =>
 {
     await _CheckMessages(db, context.Response, context.Request, publickey, privatekey);
 });
+
 app.MapGet("/getuserkey", async (ApplicationContext db, HttpContext context) =>
 {
     string Recipient = context.Request.Query["Recipient"];
@@ -75,6 +80,7 @@ app.MapGet("/getuserkey", async (ApplicationContext db, HttpContext context) =>
     // если пользователь найден, отправляем его
     return Results.Json(new {openkey =  user.OpenKey });
 });
+
 app.Run();
 
 
@@ -106,7 +112,7 @@ async Task _Registration(ApplicationContext db, HttpResponse response, HttpReque
             {
                 throw new Exception("Already Exist");
             }
-            db.UserDB.Add(new Datacell { Name = DecodeEncode.CreateMD5(user.Name), Token = user.Token, Password = DecodeEncode.CreateMD5(user.Password), OpenKey = user.OpenKey, keyValid = 3, GettedMessages = "sd", SendedMessages = "sd" });
+            db.UserDB.Add(new Datacell { Name = DecodeEncode.CreateMD5(user.Name), Token = user.Token, Password = DecodeEncode.CreateMD5(user.Password), OpenKey = user.OpenKey, keyValid = 3, GettedMessages = Message.DefaultMessage, SendedMessages = Message.DefaultMessage });
             db.SaveChanges();
             await response.WriteAsJsonAsync(user, jsonoptions);
         }
@@ -121,6 +127,7 @@ async Task _Registration(ApplicationContext db, HttpResponse response, HttpReque
         await response.WriteAsJsonAsync(new { message = e.Message });
     }
 }
+
 async Task _Authorization(ApplicationContext db, HttpResponse response, HttpRequest request, string _publicKey, string _privateKey)
 {
     try
@@ -154,6 +161,7 @@ async Task _Authorization(ApplicationContext db, HttpResponse response, HttpRequ
         await response.WriteAsJsonAsync(new { message = e.Message });
     }
 }
+
 async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpRequest request)
 {
     try
@@ -161,8 +169,6 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
         var jsonoptions = new JsonSerializerOptions();
         jsonoptions.Converters.Add(new MessageConverter());
         Message? message = await request.ReadFromJsonAsync<Message>(jsonoptions);
-
-        
         Datacell? sender = await db.UserDB.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Sender));
         
 
@@ -171,7 +177,7 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
             throw new Exception("Unknown sender");
         }
 
-        if (!checkHashCode(sender.Token, message.Text, message.hashkey))
+        if (!sender.checkHashCode(message.Text, message.hashkey))
         {
             throw new Exception("you are not sender");
         }
@@ -186,11 +192,11 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
             throw new Exception("Recipient key is invalid");
         }
 
-        string newId = getid();
+        string newId = Message.getid();
         string? gettedMessage = Recipient.GettedMessages;
         string? sendedMessage = sender.SendedMessages;
 
-        if (gettedMessage.Equals("sd"))
+        if (gettedMessage.Equals(Message.DefaultMessage))
         {
             Recipient.GettedMessages = newId;
         }
@@ -201,7 +207,7 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
             Recipient.GettedMessages = newId;
         }
         await db.SaveChangesAsync();
-        if (sendedMessage.Equals("sd"))
+        if (sendedMessage.Equals(Message.DefaultMessage))
         {
             sender.SendedMessages = newId;
         }
@@ -212,41 +218,15 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
             sender.SendedMessages = newId;
         }
         await db.SaveChangesAsync();
-        db.MessageDB.Add(new Message { Id = newId, Sender = message.Sender, Recipient = message.Recipient, Text = message.Text, hashkey = message.hashkey, nextGettedMessage = gettedMessage, nextSendedMessage = sendedMessage, lastGettedMessage = "sd", lastSendedMessage = "sd", DateTime = message.DateTime, isDelivered = false, isLosted = false, isSended = false, isViewed = false });
+        db.MessageDB.Add(new Message { Id = newId, Sender = message.Sender, Recipient = message.Recipient, Text = message.Text, hashkey = message.hashkey, nextGettedMessage = gettedMessage, nextSendedMessage = sendedMessage, lastGettedMessage = Message.DefaultMessage, lastSendedMessage = Message.DefaultMessage, DateTime = message.DateTime, isDelivered = false, isLosted = false, isSended = false, isViewed = false });
         await db.SaveChangesAsync();
-        await response.WriteAsJsonAsync(new { message = "Message sended" });
+        await response.WriteAsJsonAsync(new { message = "Message " + newId+  " sended" });
     }
     catch (Exception e)
     {
         response.StatusCode = 400;
         await response.WriteAsJsonAsync(new { message = e.Message });
     }
-}
-
-
-async Task addSendedMessage (ApplicationContext db, Datacell? sender, string sendedMessageId)
-{
-    if (sender.SendedMessages.Equals("sd"))
-    {
-        sender.SendedMessages = sendedMessageId;
-        await db.SaveChangesAsync();
-    }
-    else
-    {
-        string? gettedMessage;
-        gettedMessage = sender.SendedMessages;
-        Message? _message;
-        do
-        {
-            _message = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == gettedMessage);
-            gettedMessage = _message.nextSendedMessage;
-        }
-        while (!gettedMessage.Equals("sd"));
-        Message? sendedmessage = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == sendedMessageId);
-        _message.nextSendedMessage = sendedMessageId;
-        await db.SaveChangesAsync();
-    }
-    
 }
 
 async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpRequest request, string _publicKey, string _privateKey)
@@ -276,33 +256,25 @@ async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpReques
 
         string checkMessages = Recipient.GettedMessages;
 
-        while (!checkMessages.Equals("sd"))
+        while (!checkMessages.Equals(Message.DefaultMessage))
         {
             Message? message = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == checkMessages);
             if (message == null)
             {
                 throw new Exception("You messages is already deleted");
             }
-            Datacell? sender = await db.UserDB.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Sender));
-
             if (Recipient.OpenKey.Equals(RecipientKey))
             {
                 if (!message.isSended)
                 {
-                    messages.Append(message.DateTime + "|" + message.Sender + "|" + message.Text + "#");
-                    if (sender != null)
-                    {
-                        message.isSended = true;
-                    }
+                    messages.Append(message.DateTime + "|" + message.Id + "|" + message.Sender + "|" + message.Text + "#");
+                    message.isSended = true;
                 }
             }
             else
             {
-                if (sender != null)
-                {
-                    message.isLosted = true;
-                    messages.Append("Message losted" + "#");
-                }
+                message.isLosted = true;
+                messages.Append("Message " + message.Id + " losted, you key need to upgrade" + "#");
             }
             checkMessages = message.nextGettedMessage;
             await db.SaveChangesAsync();
@@ -315,7 +287,6 @@ async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpReques
         await response.WriteAsJsonAsync(new { message = e.Message });
     }
 }
-
 
 async Task _CheckMessages(ApplicationContext db, HttpResponse response, HttpRequest request, string _publicKey, string _privateKey)
 {
@@ -343,17 +314,18 @@ async Task _CheckMessages(ApplicationContext db, HttpResponse response, HttpRequ
         string lastSendedMessage = Sender.SendedMessages;
         string checkSendedMessages = Sender.SendedMessages;
 
-        while (!checkSendedMessages.Equals("sd"))
+        while (!checkSendedMessages.Equals(Message.DefaultMessage))
         {
             Message? Sendedmessage = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == checkSendedMessages);
-
             if (Sendedmessage == null)
             {
-                throw new Exception("You messages is already deleted");
+                messages.Append("unknown message#");
             }
-
-            messages.Append(Sendedmessage.hashkey + "|" + Sendedmessage.isSended + "|" + Sendedmessage.isDelivered + "|" + Sendedmessage.isViewed + "|" + Sendedmessage.isLosted + "#");
-            checkSendedMessages = Sendedmessage.nextSendedMessage;
+            else
+            {
+                messages.Append(Sendedmessage.Id + "|" + Sendedmessage.isSended + "|" + Sendedmessage.isDelivered + "|" + Sendedmessage.isViewed + "|" + Sendedmessage.isLosted + "#");
+                checkSendedMessages = Sendedmessage.nextSendedMessage;
+            }
         }
         await response.WriteAsJsonAsync(new { gettedmessages = messages.ToString().TrimEnd('#') });
     }
@@ -364,44 +336,46 @@ async Task _CheckMessages(ApplicationContext db, HttpResponse response, HttpRequ
     }
 }
 
-async Task _MessageDelete(ApplicationContext db, string startId)
+async Task _DeleteMessage(ApplicationContext db, Message? MessageToDelete)
 {
     try
     {
-        Message? _startMessage = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == startId);
+        string lastSendedMessage = MessageToDelete.nextSendedMessage;
+        string nextSendedMessage = MessageToDelete.nextSendedMessage;
+        string lastGettedMessage = MessageToDelete.nextSendedMessage;
+        string nextGettedMessage = MessageToDelete.nextSendedMessage;
 
-        string lastSendedMessage = _startMessage.nextSendedMessage;
-        string SendedMessages = _startMessage.nextSendedMessage;
-        string lastGettedMessage = _startMessage.nextSendedMessage;
-        string GettedMessages = _startMessage.nextSendedMessage;
+        Message? lastsended = null;
+        Message? nextsended = null;
+        Message? lastgetted = null;
+        Message? nextgetted = null;
 
-        if (!SendedMessages.Equals(""))
+        if (!lastSendedMessage.Equals(Message.DefaultMessage))
         {
-            lastSendedMessage = SendedMessages;
-            Message? _SendedMessages = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == SendedMessages);
-            Message? _GettedMessages = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == GettedMessages);
-            if (_SendedMessages.isLosted || _SendedMessages.isViewed)
-            {
-
-            }
-
+            lastsended = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == lastSendedMessage);
+            lastsended.nextSendedMessage = lastGettedMessage;
         }
+        if (!nextSendedMessage.Equals(Message.DefaultMessage))
+        {
+            nextsended = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == nextSendedMessage);
+            nextsended.lastSendedMessage = lastSendedMessage;
+        }
+        if (!lastGettedMessage.Equals(Message.DefaultMessage))
+        {
+            lastgetted = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == lastGettedMessage);
+            lastgetted.nextGettedMessage = nextGettedMessage;
+        }
+        if (!nextGettedMessage.Equals(Message.DefaultMessage))
+        {
+            nextgetted = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == nextGettedMessage);
+            nextgetted.lastGettedMessage = lastGettedMessage;
+        }
+        await db.SaveChangesAsync();
     }
     catch (Exception e)
     {
-        
+        Console.WriteLine(e.ToString());
     }
-}
-
-string getid()
-{
-    return Guid.NewGuid().ToString();
-}
-
-bool checkHashCode(string token, string text, string hash)
-{
-    string _hash = DecodeEncode.CreateMD5(token+text);
-    return hash.Equals(_hash);  
 }
 
 public class Client
@@ -424,6 +398,7 @@ public class Client
 }
 public class Message
 {
+    public const string DefaultMessage = "sd";
     public string Id { get; set; }
     public string Sender { get; set; }
     public string Recipient { get; set; }
@@ -448,6 +423,11 @@ public class Message
         DateTime = time;
     }*/
 
+    public static string getid()
+    {
+        return Guid.NewGuid().ToString();
+    }
+
 }
 public class Datacell
 {
@@ -459,6 +439,11 @@ public class Datacell
     public int keyValid { get; set; }
     public string GettedMessages { get; set; }
     public string SendedMessages { get; set; }
+    public bool checkHashCode(string text, string hash)
+    {
+        string _hash = DecodeEncode.CreateMD5(Token + text);
+        return hash.Equals(_hash);
+    }
     /*public Datacell(string id, string name, string password, string openKey, int keyvalid)
     {
         Id = id;

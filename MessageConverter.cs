@@ -5,10 +5,6 @@ namespace MessageServer
 {
     public class MessageConverter : JsonConverter<Message>
     {
-        public MessageConverter()
-        {
-        }
-
         public override Message Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             var messageText = "Undefined";
