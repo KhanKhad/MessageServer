@@ -6,6 +6,11 @@ using System.Text.Json.Serialization;
 using MessageServer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Mvc;
+using Org.BouncyCastle.Crypto;
+using Org.BouncyCastle.Security;
+using System.IO;
+using Org.BouncyCastle.OpenSsl;
+using Org.BouncyCastle.Crypto.Parameters;
 
 List<Message> NeedToSendMessages = new List<Message>();
 
@@ -370,6 +375,7 @@ async Task _DeleteMessage(ApplicationContext db, Message? MessageToDelete)
             nextgetted = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == nextGettedMessage);
             nextgetted.lastGettedMessage = lastGettedMessage;
         }
+        db.MessageDB.Remove(MessageToDelete);
         await db.SaveChangesAsync();
     }
     catch (Exception e)
@@ -377,6 +383,11 @@ async Task _DeleteMessage(ApplicationContext db, Message? MessageToDelete)
         Console.WriteLine(e.ToString());
     }
 }
+
+
+
+
+
 
 public class Client
 {
@@ -452,5 +463,25 @@ public class Datacell
         Password = password;
         keyValid = keyvalid;
     }*/
+    public static RSACryptoServiceProvider ImportPrivateKey(string pem)
+    {
+        PemReader pr = new PemReader(new StringReader(pem));
+        AsymmetricCipherKeyPair KeyPair = (AsymmetricCipherKeyPair)pr.ReadObject();
+        RSAParameters rsaParams = DotNetUtilities.ToRSAParameters((RsaPrivateCrtKeyParameters)KeyPair.Private);
 
+        RSACryptoServiceProvider csp = new RSACryptoServiceProvider();// cspParams);
+        csp.ImportParameters(rsaParams);
+        return csp;
+    }
+
+    public static RSACryptoServiceProvider ImportPublicKey(string pem)
+    {
+        PemReader pr = new PemReader(new StringReader(pem));
+        AsymmetricKeyParameter publicKey = (AsymmetricKeyParameter)pr.ReadObject();
+        RSAParameters rsaParams = DotNetUtilities.ToRSAParameters((RsaKeyParameters)publicKey);
+
+        RSACryptoServiceProvider csp = new RSACryptoServiceProvider();// cspParams);
+        csp.ImportParameters(rsaParams);
+        return csp;
+    }
 }
