@@ -15,6 +15,7 @@ namespace MessageServer
         }
         public string decript(string ToDecrypt)
         {
+            return ToDecrypt;
             try
             {
                 RSACryptoServiceProvider RSA_ = new RSACryptoServiceProvider();
@@ -45,6 +46,7 @@ namespace MessageServer
         }
         public static string encript(string ID, string PersonKey)
         {
+            return ID;
             string? Eid;
             try
             {
