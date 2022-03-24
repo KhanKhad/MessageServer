@@ -130,10 +130,11 @@ async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest
         {
             throw new Exception("Bad operation");
         }
+        db.OperationConfurmTable.RemoveRange(db.OperationConfurmTable.Where(u => u.hashName == operationConfurm.hashName));
+        db.SaveChanges();
         db.OperationConfurmTable.Add(new OperationConfurm { operationId = operationConfurm.operationId, hashName = operationConfurm.hashName, confurmStringClient = operationConfurm.confurmStringClient, confurmStringServer = operationConfurm.confurmStringServer, openkey = Message.DefaultMessage});
-        
         await db.SaveChangesAsync();
-        await response.WriteAsJsonAsync(new { ServerToken = DecodeEncode.encrypt(operationConfurm.confurmStringServer + "|" + operationConfurm.confurmStringClient, operationConfurm.openkey) });
+        await response.WriteAsJsonAsync(new { ServerToken = DecodeEncode.encrypt(operationConfurm.confurmStringClient + "|" + operationConfurm.confurmStringServer + "|" + operationConfurm.confurmStringClient, operationConfurm.openkey) });
     }
     catch (Exception e)
     {
@@ -168,8 +169,6 @@ async Task _Registration(ApplicationContext db, HttpResponse response, HttpReque
         {
             throw new Exception("WrongOpetarionToken");
         }
-        db.OperationConfurmTable.Remove(_Token);
-
         Datacell ? _user = await db.UserDB.FirstOrDefaultAsync(u => u.Name == ClientName);
         if (_user != null)
         {

@@ -18,9 +18,9 @@ namespace MessageServer
 
         public override Client Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            var personName = "Undefined";
-            var OpenKey = "";
-            string pass = null;
+            string personName = "";
+            string OpenKey = "";
+            string pass = "";
             while (reader.Read())
             {
                 if (reader.TokenType == JsonTokenType.PropertyName)
@@ -41,14 +41,8 @@ namespace MessageServer
                     }
                 }
             }
-
-            string clientname;
-            string clientpass = "";
-            clientname = _DecodeEncode.decrypt(personName);
-            if (pass != null)
-            {
-                clientpass = _DecodeEncode.decrypt(pass);
-            }
+            string clientname = _DecodeEncode.decrypt(personName);
+            string clientpass = _DecodeEncode.decrypt(pass);
             return new Client(clientname, OpenKey, clientpass);
         }
         // сериализуем объект Person в json

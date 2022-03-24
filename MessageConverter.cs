@@ -7,7 +7,7 @@ namespace MessageServer
     {
         public override Message Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            var messageText = "Undefined";
+            var messageText = "";
             var Sender = "";
             var Recipient = "";
             var hash = "";
@@ -35,10 +35,7 @@ namespace MessageServer
                     }
                 }
             }
-
-            //return new Message(Sender, Recipient, messageText, hash, DateTime.Now);
             return new Message {Sender = Sender, Recipient = Recipient, Text = messageText, DateTime = DateTime.Now.ToString(), hashkey = hash};
-
         }
         // сериализуем объект Person в json
         public override void Write(Utf8JsonWriter writer, Message message, JsonSerializerOptions options)
