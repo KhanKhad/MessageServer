@@ -10,7 +10,7 @@ namespace MessageServer
             var operationId = 0;
             var hashName = "";
             var confurmStringClient = "";
-            var confurmStringServer = "";
+            var OpenKey = "";
 
             while (reader.Read())
             {
@@ -29,12 +29,15 @@ namespace MessageServer
                         case "confurmStringClient" or "confurmStringClient" or "confurmStringClient" or "confurmStringClient" when reader.TokenType == JsonTokenType.String:
                             confurmStringClient = reader.GetString();
                             break;
+                        case "openkey" or "Openkey" or "openKey" or "OpenKey" when reader.TokenType == JsonTokenType.String:
+                            OpenKey = reader.GetString();
+                            break;
                     }
                 }
             }
 
             //return new Message(Sender, Recipient, messageText, hash, DateTime.Now);
-            return new OperationConfurm { operationId = operationId, hashName = hashName, confurmStringClient = confurmStringClient, confurmStringServer = OperationConfurm.getConfurmString() };
+            return new OperationConfurm { operationId = operationId, hashName = hashName, confurmStringClient = confurmStringClient, confurmStringServer = OperationConfurm.getConfurmString(), openkey = OpenKey };
 
         }
         // сериализуем объект Person в json
