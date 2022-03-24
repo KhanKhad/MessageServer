@@ -6,6 +6,7 @@ namespace MessageServer
     {
         public DbSet<Datacell> UserDB { get; set; } = null!;
         public DbSet<Message> MessageDB { get; set; } = null!;
+        public DbSet<OperationConfurm> OperationConfurmTable { get; set; } = null!;
         public ApplicationContext(DbContextOptions<ApplicationContext> options)
             : base(options)
         {
@@ -15,6 +16,7 @@ namespace MessageServer
         {
             modelBuilder.Entity<Datacell>();
             modelBuilder.Entity<Message>();
+            modelBuilder.Entity<OperationConfurm>();
         }
     }
 }

@@ -30,14 +30,22 @@ Timer timer = new Timer(tm, null, 0, 10000);*/
 
 RSACryptoServiceProvider RsaKey = new RSACryptoServiceProvider();
 string publickey = RsaKey.ToXmlString(false); //получим открытый ключ
+string publickeypem = DecodeEncode.ExportPublicKey(RsaKey); //получим открытый ключ
 string privatekey = RsaKey.ToXmlString(true); //получим закрытый ключ
 
-app.Map("/getkey", async (context) => {
+app.Map("/getkeyxml", async (context) => {
     var response = context.Response;
     response.Headers.ContentType = "application/json; charset=utf-8";
     string responseText = $"{publickey}";
     await response.WriteAsJsonAsync(new { openKey = responseText });
 }); //отправляет открытый ключ
+
+app.Map("/getkeypem", async (context) => {
+    var response = context.Response;
+    response.Headers.ContentType = "application/json; charset=utf-8";
+    string responseText = $"{publickeypem}";
+    await response.WriteAsJsonAsync(new { openKey = responseText });
+});
 
 app.MapGet("/api/users", async (ApplicationContext db) => await db.UserDB.ToListAsync());
 
@@ -46,6 +54,11 @@ app.MapGet("/api/user", async (ApplicationContext db) => await db.MessageDB.ToLi
 app.MapGet("/api/users1", (ApplicationContext db) => {
     db.Database.EnsureDeleted();
     db.SaveChanges();
+});
+
+app.MapPost("/getconfurm", async (ApplicationContext db, HttpContext context) =>
+{
+    await _getConfurm(db, context.Response, context.Request, publickey, privatekey);
 });
 
 app.MapPost("/registration", async (ApplicationContext db, HttpContext context) =>
@@ -102,6 +115,33 @@ app.Run();
 
 
 
+async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest request, string publickey, string privatekey)
+{
+    try
+    {
+        var jsonoptions = new JsonSerializerOptions();
+        jsonoptions.Converters.Add(new OperationConfurmConverter());
+        var operationConfurm = await request.ReadFromJsonAsync<OperationConfurm>(jsonoptions);
+        if (operationConfurm == null)
+        {
+            throw new Exception("Bad Request");
+        }
+        if(operationConfurm.operationId > 5)
+        {
+            throw new Exception("Bad operation");
+        }
+        db.OperationConfurmTable.Add(new OperationConfurm { operationId = operationConfurm.operationId, hashName = operationConfurm.hashName, confurmStringClient = operationConfurm.confurmStringClient, confurmStringServer = operationConfurm.confurmStringServer, openkey = Message.DefaultMessage});
+        
+        await db.SaveChangesAsync();
+        await response.WriteAsJsonAsync(new { ServerToken = DecodeEncode.encrypt(operationConfurm.confurmStringServer + "|" + operationConfurm.confurmStringClient, operationConfurm.openkey) });
+    }
+    catch (Exception e)
+    {
+        response.StatusCode = 400;
+        await response.WriteAsJsonAsync(new { message = e.Message });
+    }
+
+}
 
 async Task _Registration(ApplicationContext db, HttpResponse response, HttpRequest request, string _publicKey, string _privateKey)
 {
@@ -110,21 +150,36 @@ async Task _Registration(ApplicationContext db, HttpResponse response, HttpReque
         var jsonoptions = new JsonSerializerOptions();
         jsonoptions.Converters.Add(new PersonConverter(_publicKey, _privateKey));
         var user = await request.ReadFromJsonAsync<Client>(jsonoptions);
-        if (user != null)
-        {
-            Datacell? _user = await db.UserDB.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(user.Name));
-            if (_user != null)
-            {
-                throw new Exception("Already Exist");
-            }
-            db.UserDB.Add(new Datacell { Name = DecodeEncode.CreateMD5(user.Name), Token = user.Token, Password = DecodeEncode.CreateMD5(user.Password), OpenKey = user.OpenKey, keyValid = 3, GettedMessages = Message.DefaultMessage, SendedMessages = Message.DefaultMessage });
-            db.SaveChanges();
-            await response.WriteAsJsonAsync(user, jsonoptions);
-        }
-        else
+        if (user == null)
         {
             throw new Exception("Некорректные данные");
         }
+        string ServerToken = user.Name.Split('|')[0];
+        string ClientToken = user.Name.Split('|')[2];
+        string ClientName = DecodeEncode.CreateMD5(user.Name.Split('|')[1]);
+        string ClientPassword = user.Password.Split('|')[1];
+
+        OperationConfurm? _Token = await db.OperationConfurmTable.FirstOrDefaultAsync(u => u.hashName == ClientName);
+        if (_Token == null)
+        {
+            throw new Exception("WrongOpetarionToken");
+        }
+        if (!_Token.CheckOperationId(ServerToken, ClientToken, 0))
+        {
+            throw new Exception("WrongOpetarionToken");
+        }
+        db.OperationConfurmTable.Remove(_Token);
+
+        Datacell ? _user = await db.UserDB.FirstOrDefaultAsync(u => u.Name == ClientName);
+        if (_user != null)
+        {
+            throw new Exception("Already Exist");
+        }
+
+        db.UserDB.Add(new Datacell { Name = ClientName, Token = user.Token, Password = DecodeEncode.CreateMD5(ClientPassword), OpenKey = user.OpenKey, keyValid = 3, GettedMessages = Message.DefaultMessage, SendedMessages = Message.DefaultMessage });
+        
+        await db.SaveChangesAsync();
+        await response.WriteAsJsonAsync(new { Token = DecodeEncode.encrypt(ServerToken + "|" + user.Token + "|" + ClientToken, user.OpenKey) });
     }
     catch (Exception e)
     {
@@ -158,7 +213,7 @@ async Task _Authorization(ApplicationContext db, HttpResponse response, HttpRequ
         _user.OpenKey = user.OpenKey;
         _user.keyValid = 3;
         await db.SaveChangesAsync();
-        await response.WriteAsJsonAsync(new { Token = DecodeEncode.encript(user.Token, user.OpenKey) });
+        await response.WriteAsJsonAsync(new { Token = DecodeEncode.encrypt(user.Token, user.OpenKey) });
     }
     catch (Exception e)
     {
@@ -385,10 +440,6 @@ async Task _DeleteMessage(ApplicationContext db, Message? MessageToDelete)
 }
 
 
-
-
-
-
 public class Client
 {
     public string Token { get; set; }
@@ -425,15 +476,6 @@ public class Message
     public bool isViewed { get; set; }
     public string DateTime { get; set; }
 
-   /*public Message(string sender, string recipient, string text, string hash, DateTime time)
-    {
-        Sender = sender;
-        Recipient = recipient;
-        Text = text;
-        hashkey = hash;
-        DateTime = time;
-    }*/
-
     public static string getid()
     {
         return Guid.NewGuid().ToString();
@@ -455,12 +497,23 @@ public class Datacell
         string _hash = DecodeEncode.CreateMD5(Token + text);
         return hash.Equals(_hash);
     }
-    /*public Datacell(string id, string name, string password, string openKey, int keyvalid)
+}
+public class OperationConfurm
+{
+    public int Id { get; set; }
+    public int operationId { get; set; }
+    //0- регистрация, 1- авторизация, 2- отправка сообщения, 3- получение сообщений
+    //4- отправка информации о сообщениях, 5- получение информации об отправленных сообщениях
+    public string hashName { get; set; }
+    public string confurmStringClient { get; set; }
+    public string confurmStringServer { get; set; }
+    public string openkey { get; set; }
+    public static string getConfurmString()
     {
-        Id = id;
-        Name = name;
-        OpenKey = openKey;
-        Password = password;
-        keyValid = keyvalid;
-    }*/
+        return Guid.NewGuid().ToString();
+    }
+    public bool CheckOperationId(string serverToken, string clientToken, int v)
+    {
+        return Id == v && confurmStringServer.Equals(serverToken) && confurmStringClient.Equals(clientToken);
+    }
 }

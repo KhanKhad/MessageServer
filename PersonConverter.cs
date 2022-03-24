@@ -44,10 +44,10 @@ namespace MessageServer
 
             string clientname;
             string clientpass = "";
-            clientname = _DecodeEncode.decript(personName);
+            clientname = _DecodeEncode.decrypt(personName);
             if (pass != null)
             {
-                clientpass = _DecodeEncode.decript(pass);
+                clientpass = _DecodeEncode.decrypt(pass);
             }
             return new Client(clientname, OpenKey, clientpass);
         }
@@ -55,7 +55,7 @@ namespace MessageServer
         public override void Write(Utf8JsonWriter writer, Client person, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
-            writer.WriteString("Token", DecodeEncode.encript(person.Token, person.OpenKey));
+            writer.WriteString("Token", DecodeEncode.encrypt(person.Token, person.OpenKey));
             writer.WriteEndObject();
         }
     }
