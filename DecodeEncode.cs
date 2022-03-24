@@ -39,7 +39,7 @@ namespace MessageServer
                 UnicodeEncoding ByteConverter = new UnicodeEncoding();
 
                 //Create byte arrays to hold original, encrypted, and decrypted data.
-                byte[] Todecrypt = StringToBytes(ToDecrypt);
+                byte[] Todecrypt = Convert.FromBase64String(ToDecrypt);
                 byte[] Decrypted;
 
                 RSA_.FromXmlString(privateKey);
@@ -67,12 +67,10 @@ namespace MessageServer
             {
                 RSACryptoServiceProvider RSA_ = new RSACryptoServiceProvider();
                 RSA_.FromXmlString(PersonKey);
-                UnicodeEncoding ByteConverter = new UnicodeEncoding();
-                byte[] IdToEncode = ByteConverter.GetBytes(ID);
+                byte[] IdToEncode = Encoding.UTF8.GetBytes(ID);
                 byte[] EncodedId;
                 EncodedId = RSAEncrypt(IdToEncode, RSA_.ExportParameters(false), false);
-                Eid = Convert.ToBase64String(EncodedId);
-                //Eid = BytesToString(EncodedId);
+                return Convert.ToBase64String(EncodedId);
             }
             catch (ArgumentNullException)
             {

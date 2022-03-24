@@ -47,11 +47,11 @@ app.Map("/getkeypem", async (context) => {
     await response.WriteAsJsonAsync(new { openKey = responseText });
 });
 
-app.MapGet("/api/users", async (ApplicationContext db) => await db.UserDB.ToListAsync());
+app.MapGet("/api/user1", async (ApplicationContext db) => await db.UserDB.ToListAsync());
+app.MapGet("/api/user2", async (ApplicationContext db) => await db.MessageDB.ToListAsync());
+app.MapGet("/api/user3", async (ApplicationContext db) => await db.OperationConfurmTable.ToListAsync());
 
-app.MapGet("/api/user", async (ApplicationContext db) => await db.MessageDB.ToListAsync());
-
-app.MapGet("/api/users1", (ApplicationContext db) => {
+app.MapGet("/api/users", (ApplicationContext db) => {
     db.Database.EnsureDeleted();
     db.SaveChanges();
 });
@@ -130,11 +130,25 @@ async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest
         {
             throw new Exception("Bad operation");
         }
-        db.OperationConfurmTable.RemoveRange(db.OperationConfurmTable.Where(u => u.hashName == operationConfurm.hashName));
-        db.SaveChanges();
+        if (operationConfurm.operationId == 0)
+        {
+            Datacell? _user = await db.UserDB.FirstOrDefaultAsync(u => u.Name == operationConfurm.hashName);
+            if (_user != null)
+            {
+                throw new Exception("Already Exist");
+            }
+        }
+        string toClient = DecodeEncode.encrypt(operationConfurm.confurmStringClient + "|" + operationConfurm.confurmStringServer + "|" + operationConfurm.confurmStringClient, operationConfurm.openkey);
+        //db.OperationConfurmTable.RemoveRange(db.OperationConfurmTable.Where(u => u.hashName == operationConfurm.hashName));
+        var lastConfurm = db.OperationConfurmTable.FirstOrDefault(u => u.hashName == operationConfurm.hashName);
+        if (lastConfurm != null)
+        {
+            db.OperationConfurmTable.Remove(lastConfurm);
+            db.SaveChanges();
+        }
         db.OperationConfurmTable.Add(new OperationConfurm { operationId = operationConfurm.operationId, hashName = operationConfurm.hashName, confurmStringClient = operationConfurm.confurmStringClient, confurmStringServer = operationConfurm.confurmStringServer, openkey = Message.DefaultMessage});
         await db.SaveChangesAsync();
-        await response.WriteAsJsonAsync(new { ServerToken = DecodeEncode.encrypt(operationConfurm.confurmStringClient + "|" + operationConfurm.confurmStringServer + "|" + operationConfurm.confurmStringClient, operationConfurm.openkey) });
+        await response.WriteAsJsonAsync(new { ServerToken =  toClient});
     }
     catch (Exception e)
     {
@@ -163,11 +177,11 @@ async Task _Registration(ApplicationContext db, HttpResponse response, HttpReque
         OperationConfurm? _Token = await db.OperationConfurmTable.FirstOrDefaultAsync(u => u.hashName == ClientName);
         if (_Token == null)
         {
-            throw new Exception("WrongOpetarionToken");
+            throw new Exception("WrongOpetarionToken1");
         }
         if (!_Token.CheckOperationId(ServerToken, ClientToken, 0))
         {
-            throw new Exception("WrongOpetarionToken");
+            throw new Exception("WrongOpetarionToken2");
         }
         Datacell ? _user = await db.UserDB.FirstOrDefaultAsync(u => u.Name == ClientName);
         if (_user != null)
