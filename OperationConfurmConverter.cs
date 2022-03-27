@@ -5,9 +5,19 @@ namespace MessageServer
 {
     public class OperationConfurmConverter : JsonConverter<OperationConfurm>
     {
+        public string publicKey;
+        public string privateKey;
+        DecodeEncode _DecodeEncode;
+
+        public OperationConfurmConverter(string _publicKey, string _privateKey)
+        {
+            privateKey = _privateKey;
+            publicKey = _publicKey;
+            _DecodeEncode = new DecodeEncode(_publicKey, _privateKey);
+        }
         public override OperationConfurm Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
-            var operationId = 0;
+            var operationId = "";
             var hashName = "";
             var confurmStringClient = "";
             var OpenKey = "";
@@ -21,7 +31,7 @@ namespace MessageServer
                     switch (propertyName)
                     {
                         case "operationId" or "operationid" when reader.TokenType == JsonTokenType.String:
-                            operationId = reader.GetInt16();
+                            operationId = reader.GetString();
                             break;
                         case "hashName" or "hashname" when reader.TokenType == JsonTokenType.String:
                             hashName = reader.GetString();
@@ -37,7 +47,7 @@ namespace MessageServer
             }
 
             //return new Message(Sender, Recipient, messageText, hash, DateTime.Now);
-            return new OperationConfurm { operationId = operationId, hashName = hashName, confurmStringClient = confurmStringClient, confurmStringServer = OperationConfurm.getConfurmString(), openkey = OpenKey };
+            return new OperationConfurm { operationId = int.Parse(_DecodeEncode.decrypt(operationId)), hashName = _DecodeEncode.decrypt(hashName), confurmStringClient = _DecodeEncode.decrypt(confurmStringClient), confurmStringServer = OperationConfurm.getConfurmString(), openkey = OpenKey };
 
         }
         // сериализуем объект Person в json

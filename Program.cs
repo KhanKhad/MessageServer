@@ -115,12 +115,12 @@ app.Run();
 
 
 
-async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest request, string publickey, string privatekey)
+async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest request, string _publickey, string _privatekey)
 {
     try
     {
         var jsonoptions = new JsonSerializerOptions();
-        jsonoptions.Converters.Add(new OperationConfurmConverter());
+        jsonoptions.Converters.Add(new OperationConfurmConverter(_publickey, _privatekey));
         var operationConfurm = await request.ReadFromJsonAsync<OperationConfurm>(jsonoptions);
         if (operationConfurm == null)
         {
@@ -146,8 +146,9 @@ async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest
             db.OperationConfurmTable.Remove(lastConfurm);
             db.SaveChanges();
         }
-        db.OperationConfurmTable.Add(new OperationConfurm { operationId = operationConfurm.operationId, hashName = operationConfurm.hashName, confurmStringClient = operationConfurm.confurmStringClient, confurmStringServer = operationConfurm.confurmStringServer, openkey = Message.DefaultMessage });//
-        string toClient = DecodeEncode.encrypt(operationConfurm.confurmStringClient + "|" + operationConfurm.confurmStringServer + "|" + operationConfurm.confurmStringClient, operationConfurm.openkey);//   
+        string toClient = DecodeEncode.encrypt(operationConfurm.confurmStringClient + "|" + operationConfurm.confurmStringServer, operationConfurm.openkey);//   
+        operationConfurm.openkey = Message.DefaultMessage;
+        db.OperationConfurmTable.Add(operationConfurm);
         await db.SaveChangesAsync();
         await response.WriteAsJsonAsync(new { ServerToken =  toClient});
     }
@@ -184,12 +185,15 @@ async Task _Registration(ApplicationContext db, HttpResponse response, HttpReque
         {
             throw new Exception("WrongOpetarionToken2");
         }
+        db.OperationConfurmTable.Remove(_Token);
+        await db.SaveChangesAsync();
+
         Datacell ? _user = await db.UserDB.FirstOrDefaultAsync(u => u.Name == ClientName);
         if (_user != null)
         {
             throw new Exception("Already Exist");
         }
-
+        
         db.UserDB.Add(new Datacell { Name = ClientName, Token = user.Token, Password = DecodeEncode.CreateMD5(ClientPassword), OpenKey = user.OpenKey, keyValid = 3, GettedMessages = Message.DefaultMessage, SendedMessages = Message.DefaultMessage });
         
         await db.SaveChangesAsync();
@@ -210,24 +214,45 @@ async Task _Authorization(ApplicationContext db, HttpResponse response, HttpRequ
         jsonoptions.Converters.Add(new PersonConverter(_publicKey, _privateKey));
         var user = await request.ReadFromJsonAsync<Client>(jsonoptions);
 
+        string ServerToken = user.Password.Split('|')[2];
+        string ClientToken = user.Password.Split('|')[0];
+        string ClientName = DecodeEncode.CreateMD5(user.Name.Split('|')[1]);
+        string ClientPassword = DecodeEncode.CreateMD5(user.Password.Split('|')[1]);
+
+        OperationConfurm? _Token = await db.OperationConfurmTable.FirstOrDefaultAsync(u => u.hashName == ClientName);
+        if (_Token == null)
+        {
+            throw new Exception("WrongOpetarionToken1");
+        }
+        if (!_Token.CheckOperationId(ServerToken, ClientToken, 1))
+        {
+            throw new Exception("WrongOpetarionToken2");
+        }
+        db.OperationConfurmTable.Remove(_Token);
+        await db.SaveChangesAsync();
+
         if (user == null)
         {
             throw new Exception("Bad Request");
         }
 
-        Datacell? _user = await db.UserDB.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(user.Name));
+        Datacell? _user = await db.UserDB.FirstOrDefaultAsync(u => u.Name == ClientName);
 
         // если не найден, отправляем статусный код и сообщение об ошибке
         if (_user == null)
         {
             throw new Exception("User not found");
         }
+        if (!_user.Password.Equals(ClientPassword))
+        {
+            throw new Exception("Wrong password");
+        }
 
         _user.Token = user.Token;
         _user.OpenKey = user.OpenKey;
         _user.keyValid = 3;
         await db.SaveChangesAsync();
-        await response.WriteAsJsonAsync(new { Token = DecodeEncode.encrypt(user.Token, user.OpenKey) });
+        await response.WriteAsJsonAsync(new { Token = DecodeEncode.encrypt(ClientToken + "|" + user.Token + "|" + ServerToken, user.OpenKey) });
     }
     catch (Exception e)
     {
@@ -241,7 +266,7 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
     try
     {
         var jsonoptions = new JsonSerializerOptions();
-        jsonoptions.Converters.Add(new MessageConverter());
+        jsonoptions.Converters.Add(new MessageConverter(publickey, privatekey));
         Message? message = await request.ReadFromJsonAsync<Message>(jsonoptions);
         Datacell? sender = await db.UserDB.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Sender));
         
@@ -528,7 +553,6 @@ public class OperationConfurm
     }
     public bool CheckOperationId(string serverToken, string clientToken, int v)
     {
-        Console.WriteLine("\n" + (Id == v) + "\n" +confurmStringServer+ "|" +(serverToken) + "\n" + confurmStringClient + "|" + (clientToken) + "\n");
         return operationId == v && confurmStringServer.Equals(serverToken) && confurmStringClient.Equals(clientToken);
     }
 }
