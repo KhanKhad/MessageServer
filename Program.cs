@@ -138,7 +138,7 @@ async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest
                 throw new Exception("Already Exist");
             }
         }
-        string toClient = DecodeEncode.encrypt(operationConfurm.confurmStringClient + "|" + operationConfurm.confurmStringServer + "|" + operationConfurm.confurmStringClient, operationConfurm.openkey);
+        
         //db.OperationConfurmTable.RemoveRange(db.OperationConfurmTable.Where(u => u.hashName == operationConfurm.hashName));
         var lastConfurm = db.OperationConfurmTable.FirstOrDefault(u => u.hashName == operationConfurm.hashName);
         if (lastConfurm != null)
@@ -146,7 +146,8 @@ async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest
             db.OperationConfurmTable.Remove(lastConfurm);
             db.SaveChanges();
         }
-        db.OperationConfurmTable.Add(new OperationConfurm { operationId = operationConfurm.operationId, hashName = operationConfurm.hashName, confurmStringClient = operationConfurm.confurmStringClient, confurmStringServer = operationConfurm.confurmStringServer, openkey = Message.DefaultMessage});
+        db.OperationConfurmTable.Add(new OperationConfurm { operationId = operationConfurm.operationId, hashName = operationConfurm.hashName, confurmStringClient = operationConfurm.confurmStringClient, confurmStringServer = operationConfurm.confurmStringServer, openkey = Message.DefaultMessage });//
+        string toClient = DecodeEncode.encrypt(operationConfurm.confurmStringClient + "|" + operationConfurm.confurmStringServer + "|" + operationConfurm.confurmStringClient, operationConfurm.openkey);//   
         await db.SaveChangesAsync();
         await response.WriteAsJsonAsync(new { ServerToken =  toClient});
     }
@@ -527,6 +528,7 @@ public class OperationConfurm
     }
     public bool CheckOperationId(string serverToken, string clientToken, int v)
     {
-        return Id == v && confurmStringServer.Equals(serverToken) && confurmStringClient.Equals(clientToken);
+        Console.WriteLine("\n" + (Id == v) + "\n" +confurmStringServer+ "|" +(serverToken) + "\n" + confurmStringClient + "|" + (clientToken) + "\n");
+        return operationId == v && confurmStringServer.Equals(serverToken) && confurmStringClient.Equals(clientToken);
     }
 }
