@@ -268,19 +268,32 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
         var jsonoptions = new JsonSerializerOptions();
         jsonoptions.Converters.Add(new MessageConverter(publickey, privatekey));
         Message? message = await request.ReadFromJsonAsync<Message>(jsonoptions);
-        Datacell? sender = await db.UserDB.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Sender));
-        
+
+        if (message == null)
+        {
+            throw new Exception("Null message");
+        }
+
+        OperationConfurm? _Token = await db.OperationConfurmTable.FirstOrDefaultAsync(u => u.hashName == message.Sender);
+
+        if (_Token == null)
+        {
+            throw new Exception("WrongOpetarionToken1");
+        }
+
+        Datacell? sender = await db.UserDB.FirstOrDefaultAsync(u => u.Name == message.Sender);
 
         if (sender == null)
         {
             throw new Exception("Unknown sender");
         }
 
-        if (!sender.checkHashCode(message.Text, message.hashkey))
+        if (!_Token.CheckCorrectOperation(2, message.hashkey, sender.Token, message.Text))
         {
-            throw new Exception("you are not sender");
+            throw new Exception("WrongOpetarionToken2");
         }
-        Datacell? Recipient = await db.UserDB.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(message.Recipient));
+
+        Datacell? Recipient = await db.UserDB.FirstOrDefaultAsync(u => u.Name == message.Recipient);
 
         if (Recipient == null)
         {
@@ -319,7 +332,7 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
         await db.SaveChangesAsync();
         db.MessageDB.Add(new Message { Id = newId, Sender = message.Sender, Recipient = message.Recipient, Text = message.Text, hashkey = message.hashkey, nextGettedMessage = gettedMessage, nextSendedMessage = sendedMessage, lastGettedMessage = Message.DefaultMessage, lastSendedMessage = Message.DefaultMessage, DateTime = message.DateTime, isDelivered = false, isLosted = false, isSended = false, isViewed = false });
         await db.SaveChangesAsync();
-        await response.WriteAsJsonAsync(new { message = "Message " + newId+  " sended" });
+        await response.WriteAsJsonAsync(new { message = "Message " + newId +  " sended" });
     }
     catch (Exception e)
     {
@@ -333,23 +346,37 @@ async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpReques
     try
     {
         var jsonoptions = new JsonSerializerOptions();
-        jsonoptions.Converters.Add(new PersonConverter(_publicKey, _privateKey));
-        var client = await request.ReadFromJsonAsync<Client>(jsonoptions);
+        jsonoptions.Converters.Add(new RecipientConverter());
+        var client = await request.ReadFromJsonAsync<Recipient>(jsonoptions);
 
-        if (client.Name == null || client.OpenKey == null)
+        if (client == null)
         {
-            throw new Exception("Unknown Recipient, name || openkey == null");
+            throw new Exception("Unknown Recipient1");
         }
 
-        string _Recipient = client.Name;
-        string RecipientKey = client.OpenKey;
+        string _Recipient = client.hashName;
+        string RecipientKey = client.openkey;
+        string hashkey = client.hashKey;
 
-        Datacell? Recipient = await db.UserDB.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(_Recipient));
+        Datacell? Recipient = await db.UserDB.FirstOrDefaultAsync(u => u.Name == _Recipient);
         
         if (Recipient == null)
         {
-            throw new Exception("Unknown Recipient");
+            throw new Exception("Unknown Recipient2");
         }
+
+        OperationConfurm? _Token = await db.OperationConfurmTable.FirstOrDefaultAsync(u => u.hashName == _Recipient);
+
+        if (_Token == null)
+        {
+            throw new Exception("WrongOpetarionToken1");
+        }
+
+        if (!_Token.CheckCorrectOperation(3, hashkey, Recipient.Token, _Recipient))
+        {
+            throw new Exception("WrongOpetarionToken2");
+        }
+
 
         StringBuilder messages = new StringBuilder();
 
@@ -360,24 +387,29 @@ async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpReques
             Message? message = await db.MessageDB.FirstOrDefaultAsync(u => u.Id == checkMessages);
             if (message == null)
             {
-                throw new Exception("You messages is already deleted");
-            }
-            if (Recipient.OpenKey.Equals(RecipientKey))
-            {
-                if (!message.isSended)
-                {
-                    messages.Append(message.DateTime + "|" + message.Id + "|" + message.Sender + "|" + message.Text + "#");
-                    message.isSended = true;
-                }
+                messages.Append("Message losted#");
             }
             else
             {
-                message.isLosted = true;
-                messages.Append("Message " + message.Id + " losted, you key need to upgrade" + "#");
+                if (Recipient.OpenKey.Equals(RecipientKey))
+                {
+                    if (!message.isSended)
+                    {
+                        messages.Append(message.DateTime + "|" + message.Id + "|" + message.Sender + "|" + message.Text + "#");
+                        message.isSended = true;
+                        await db.SaveChangesAsync();
+                    }
+                }
+                else
+                {
+                    message.isLosted = true;
+                    messages.Append("Message " + message.Id + " losted, you key need to upgrade" + "#");
+                    await db.SaveChangesAsync();
+                }
+                checkMessages = message.nextGettedMessage;
             }
-            checkMessages = message.nextGettedMessage;
-            await db.SaveChangesAsync();
         }
+        
         await response.WriteAsJsonAsync(new { gettedmessages = messages.ToString().TrimEnd('#') });
     }
     catch (Exception e)
@@ -554,5 +586,24 @@ public class OperationConfurm
     public bool CheckOperationId(string serverToken, string clientToken, int v)
     {
         return operationId == v && confurmStringServer.Equals(serverToken) && confurmStringClient.Equals(clientToken);
+    }
+
+    public bool CheckCorrectOperation(int v, string hash, string clientToken, string enMessage)
+    {
+        return operationId == v && hash.Equals(DecodeEncode.CreateMD5(clientToken + enMessage + confurmStringServer));
+    }
+}
+
+public class Recipient
+{
+    public string hashName { get; set; }
+    public string openkey { get; set; }
+    public string hashKey { get; set; }
+
+    public Recipient(string name, string hash, string _openkey)
+    {
+        hashName = name;
+        hashKey = hash;
+        openkey = _openkey;
     }
 }

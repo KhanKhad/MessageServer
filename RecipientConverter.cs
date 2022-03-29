@@ -3,24 +3,13 @@ using System.Text.Json.Serialization;
 
 namespace MessageServer
 {
-    public class PersonConverter : JsonConverter<Client>
+    public class RecipientConverter : JsonConverter<Recipient>
     {
-        public string publicKey;
-        public string privateKey;
-        DecodeEncode _DecodeEncode;
-
-        public PersonConverter(string _publicKey, string _privateKey)
-        {
-            privateKey = _privateKey;
-            publicKey = _publicKey;
-            _DecodeEncode = new DecodeEncode(_publicKey, _privateKey);
-        }
-
-        public override Client Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        public override Recipient Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             string personName = "";
             string OpenKey = "";
-            string pass = "";
+            string hash = "";
             while (reader.Read())
             {
                 if (reader.TokenType == JsonTokenType.PropertyName)
@@ -35,23 +24,21 @@ namespace MessageServer
                         case "openkey" or "Openkey" or "openKey" or "OpenKey" when reader.TokenType == JsonTokenType.String:
                             OpenKey = reader.GetString();
                             break;
-                        case "Password" or "password" when reader.TokenType == JsonTokenType.String:
-                            pass = reader.GetString();
+                        case "hashkey" or "hashKey" when reader.TokenType == JsonTokenType.String:
+                            hash = reader.GetString();
                             break;
                     }
                 }
             }
-
-            string clientname = _DecodeEncode.decrypt(personName);
-            string clientpass = _DecodeEncode.decrypt(pass);
-            return new Client(clientname, OpenKey, clientpass);
+            return new Recipient( personName, OpenKey, hash);
         }
         // сериализуем объект Person в json
-        public override void Write(Utf8JsonWriter writer, Client person, JsonSerializerOptions options)
+        public override void Write(Utf8JsonWriter writer, Recipient person, JsonSerializerOptions options)
         {
             writer.WriteStartObject();
-            writer.WriteString("Token", DecodeEncode.encrypt(person.Token, person.OpenKey));
+            writer.WriteString("Token", DecodeEncode.encrypt(person.hashName, person.openkey));
             writer.WriteEndObject();
         }
     }
 }
+
