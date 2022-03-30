@@ -30,7 +30,7 @@ namespace MessageServer
                     }
                 }
             }
-            return new Recipient( personName, OpenKey, hash);
+            return new Recipient( personName, hash, OpenKey);
         }
         // сериализуем объект Person в json
         public override void Write(Utf8JsonWriter writer, Recipient person, JsonSerializerOptions options)

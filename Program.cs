@@ -293,6 +293,9 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
             throw new Exception("WrongOpetarionToken2");
         }
 
+        db.OperationConfurmTable.Remove(_Token);
+        await db.SaveChangesAsync();
+
         Datacell? Recipient = await db.UserDB.FirstOrDefaultAsync(u => u.Name == message.Recipient);
 
         if (Recipient == null)
@@ -377,6 +380,8 @@ async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpReques
             throw new Exception("WrongOpetarionToken2");
         }
 
+        db.OperationConfurmTable.Remove(_Token);
+        await db.SaveChangesAsync();
 
         StringBuilder messages = new StringBuilder();
 
