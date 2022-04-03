@@ -44,6 +44,9 @@ namespace MessageServer
 
             string clientname = _DecodeEncode.decrypt(personName);
             string clientpass = _DecodeEncode.decrypt(pass);
+
+
+
             return new Client(clientname, OpenKey, clientpass);
         }
         // сериализуем объект Person в json

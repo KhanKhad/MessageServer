@@ -87,16 +87,28 @@ app.MapPost("/checkMessagesInfo", async (ApplicationContext db, HttpContext cont
     await _CheckMessages(db, context.Response, context.Request, publickey, privatekey);
 });
 
-app.MapGet("/getuserkey", async (ApplicationContext db, HttpContext context) =>
+app.MapGet("/getuserkeyxml", async (ApplicationContext db, HttpContext context) =>
 {
-    string Recipient = context.Request.Query["Recipient"];
+    string Recipient = context.Request.Query["recipient"];
     Datacell? user = await db.UserDB.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(Recipient));
 
     // если не найден, отправляем статусный код и сообщение об ошибке
     if (user == null) return Results.NotFound(new { message = "Пользователь не найден" });
     if (user.keyValid == 0) return Results.NotFound(new { message = "Recipient key is invalid" });
     // если пользователь найден, отправляем его
-    return Results.Json(new {openkey =  user.OpenKey });
+    return Results.Json(new {openkey =  user.OpenKeyXML });
+});
+
+app.MapGet("/getuserkeypem", async (ApplicationContext db, HttpContext context) =>
+{
+    string Recipient = context.Request.Query["recipient"];
+    Datacell? user = await db.UserDB.FirstOrDefaultAsync(u => u.Name == DecodeEncode.CreateMD5(Recipient));
+
+    // если не найден, отправляем статусный код и сообщение об ошибке
+    if (user == null) return Results.NotFound(new { message = "Пользователь не найден" });
+    if (user.keyValid == 0) return Results.NotFound(new { message = "Recipient key is invalid" });
+    // если пользователь найден, отправляем его
+    return Results.Json(new { openkey = user.OpenKeyPem });
 });
 
 app.Run();
@@ -193,11 +205,27 @@ async Task _Registration(ApplicationContext db, HttpResponse response, HttpReque
         {
             throw new Exception("Already Exist");
         }
-        
-        db.UserDB.Add(new Datacell { Name = ClientName, Token = user.Token, Password = DecodeEncode.CreateMD5(ClientPassword), OpenKey = user.OpenKey, keyValid = 3, GettedMessages = Message.DefaultMessage, SendedMessages = Message.DefaultMessage });
+
+        string clientkeyxml;
+        string clientkeypem;
+        if (user.OpenKey.StartsWith("-----"))
+        {
+            clientkeypem = user.OpenKey;
+            clientkeyxml = DecodeEncode.ImportPublicKey(clientkeypem).ToXmlString(false);
+        }
+        else
+        {
+            clientkeyxml = user.OpenKey;
+            RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
+            rsa.FromXmlString(clientkeyxml);
+            clientkeypem = DecodeEncode.ExportPublicKey(rsa);
+        }
+
+
+        db.UserDB.Add(new Datacell { Name = ClientName, Token = user.Token, Password = DecodeEncode.CreateMD5(ClientPassword), OpenKeyXML = clientkeyxml, OpenKeyPem = clientkeypem, keyValid = 3, GettedMessages = Message.DefaultMessage, SendedMessages = Message.DefaultMessage });
         
         await db.SaveChangesAsync();
-        await response.WriteAsJsonAsync(new { Token = DecodeEncode.encrypt(ServerToken + "|" + user.Token + "|" + ClientToken, user.OpenKey) });
+        await response.WriteAsJsonAsync(new { Token = DecodeEncode.encrypt(ServerToken + "|" + user.Token + "|" + ClientToken, clientkeyxml) });
     }
     catch (Exception e)
     {
@@ -248,11 +276,28 @@ async Task _Authorization(ApplicationContext db, HttpResponse response, HttpRequ
             throw new Exception("Wrong password");
         }
 
+
+        string clientkeyxml;
+        string clientkeypem;
+        if (user.OpenKey.StartsWith("-----"))
+        {
+            clientkeypem = user.OpenKey;
+            clientkeyxml = DecodeEncode.ImportPublicKey(clientkeypem).ToXmlString(false);
+        }
+        else
+        {
+            clientkeyxml = user.OpenKey;
+            RSACryptoServiceProvider rsa = new RSACryptoServiceProvider();
+            rsa.FromXmlString(clientkeyxml);
+            clientkeypem = DecodeEncode.ExportPublicKey(rsa);
+        }
+
         _user.Token = user.Token;
-        _user.OpenKey = user.OpenKey;
+        _user.OpenKeyXML = clientkeyxml;
+        _user.OpenKeyPem = clientkeypem;
         _user.keyValid = 3;
         await db.SaveChangesAsync();
-        await response.WriteAsJsonAsync(new { Token = DecodeEncode.encrypt(ClientToken + "|" + user.Token + "|" + ServerToken, user.OpenKey) });
+        await response.WriteAsJsonAsync(new { Token = DecodeEncode.encrypt(ClientToken + "|" + user.Token + "|" + ServerToken, clientkeyxml) });
     }
     catch (Exception e)
     {
@@ -396,7 +441,7 @@ async Task _GetMessages(ApplicationContext db, HttpResponse response, HttpReques
             }
             else
             {
-                if (Recipient.OpenKey.Equals(RecipientKey))
+                if (Recipient.OpenKeyXML.Equals(RecipientKey) || Recipient.OpenKeyPem.Equals(RecipientKey) || RecipientKey.Equals("ANY"))
                 {
                     if (!message.isSended)
                     {
@@ -564,7 +609,8 @@ public class Datacell
     public string Name { get; set; }
     public string Token { get; set; }
     public string Password { get; set; }
-    public string OpenKey { get; set; }
+    public string OpenKeyXML { get; set; }
+    public string OpenKeyPem { get; set; }
     public int keyValid { get; set; }
     public string GettedMessages { get; set; }
     public string SendedMessages { get; set; }
