@@ -5,16 +5,6 @@ namespace MessageServer
 {
     public class MessageConverter : JsonConverter<Message>
     {
-        public string publicKey;
-        public string privateKey;
-        DecodeEncode _DecodeEncode;
-
-        public MessageConverter(string _publicKey, string _privateKey)
-        {
-            privateKey = _privateKey;
-            publicKey = _publicKey;
-            _DecodeEncode = new DecodeEncode(_publicKey, _privateKey);
-        }
         public override Message Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             var messageText = "";

@@ -5,16 +5,6 @@ namespace MessageServer
 {
     public class OperationConfurmConverter : JsonConverter<OperationConfurm>
     {
-        public string publicKey;
-        public string privateKey;
-        DecodeEncode _DecodeEncode;
-
-        public OperationConfurmConverter(string _publicKey, string _privateKey)
-        {
-            privateKey = _privateKey;
-            publicKey = _publicKey;
-            _DecodeEncode = new DecodeEncode(_publicKey, _privateKey);
-        }
         public override OperationConfurm Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             var operationId = "";
@@ -47,7 +37,7 @@ namespace MessageServer
             }
 
             //return new Message(Sender, Recipient, messageText, hash, DateTime.Now);
-            return new OperationConfurm { operationId = int.Parse(_DecodeEncode.decrypt(operationId)), hashName = _DecodeEncode.decrypt(hashName), confurmStringClient = _DecodeEncode.decrypt(confurmStringClient), confurmStringServer = OperationConfurm.getConfurmString(), openkey = OpenKey };
+            return new OperationConfurm { operationId = operationId, hashName = hashName, confurmStringClient = confurmStringClient, confurmStringServer = OperationConfurm.getConfurmString(), openkey = OpenKey };
 
         }
         // сериализуем объект Person в json

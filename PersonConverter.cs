@@ -5,17 +5,6 @@ namespace MessageServer
 {
     public class PersonConverter : JsonConverter<Client>
     {
-        public string publicKey;
-        public string privateKey;
-        DecodeEncode _DecodeEncode;
-
-        public PersonConverter(string _publicKey, string _privateKey)
-        {
-            privateKey = _privateKey;
-            publicKey = _publicKey;
-            _DecodeEncode = new DecodeEncode(_publicKey, _privateKey);
-        }
-
         public override Client Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
         {
             string personName = "";
@@ -42,12 +31,7 @@ namespace MessageServer
                 }
             }
 
-            string clientname = _DecodeEncode.decrypt(personName);
-            string clientpass = _DecodeEncode.decrypt(pass);
-
-
-
-            return new Client(clientname, OpenKey, clientpass);
+            return new Client(personName, OpenKey, pass);
         }
         // сериализуем объект Person в json
         public override void Write(Utf8JsonWriter writer, Client person, JsonSerializerOptions options)

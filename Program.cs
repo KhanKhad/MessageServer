@@ -1,16 +1,8 @@
-using System.Text.RegularExpressions;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using MessageServer;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.AspNetCore.Mvc;
-using Org.BouncyCastle.Crypto;
-using Org.BouncyCastle.Security;
-using System.IO;
-using Org.BouncyCastle.OpenSsl;
-using Org.BouncyCastle.Crypto.Parameters;
 
 List<Message> NeedToSendMessages = new List<Message>();
 
@@ -132,17 +124,22 @@ async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest
     try
     {
         var jsonoptions = new JsonSerializerOptions();
-        jsonoptions.Converters.Add(new OperationConfurmConverter(_publickey, _privatekey));
+        jsonoptions.Converters.Add(new OperationConfurmConverter());
         var operationConfurm = await request.ReadFromJsonAsync<OperationConfurm>(jsonoptions);
         if (operationConfurm == null)
         {
             throw new Exception("Bad Request");
         }
-        if(operationConfurm.operationId > 5)
+
+        operationConfurm.operationId = DecodeEncode.decrypt(operationConfurm.operationId, _privatekey);
+        operationConfurm.hashName = DecodeEncode.decrypt(operationConfurm.hashName, _privatekey);
+        operationConfurm.confurmStringClient = DecodeEncode.decrypt(operationConfurm.confurmStringClient, _privatekey);
+
+        if(int.Parse(operationConfurm.operationId) > 5)
         {
             throw new Exception("Bad operation");
         }
-        if (operationConfurm.operationId == 0)
+        if (int.Parse(operationConfurm.operationId) == 0)
         {
             Datacell? _user = await db.UserDB.FirstOrDefaultAsync(u => u.Name == operationConfurm.hashName);
             if (_user != null)
@@ -177,12 +174,17 @@ async Task _Registration(ApplicationContext db, HttpResponse response, HttpReque
     try
     {
         var jsonoptions = new JsonSerializerOptions();
-        jsonoptions.Converters.Add(new PersonConverter(_publicKey, _privateKey));
+        jsonoptions.Converters.Add(new PersonConverter());
         var user = await request.ReadFromJsonAsync<Client>(jsonoptions);
+
         if (user == null)
         {
             throw new Exception("Некорректные данные");
         }
+
+        user.Name = DecodeEncode.decrypt(user.Name, _privateKey);
+        user.Password = DecodeEncode.decrypt(user.Password, _privateKey);
+
         string ServerToken = user.Name.Split('|')[0];
         string ClientToken = user.Name.Split('|')[2];
         string ClientName = DecodeEncode.CreateMD5(user.Name.Split('|')[1]);
@@ -239,8 +241,11 @@ async Task _Authorization(ApplicationContext db, HttpResponse response, HttpRequ
     try
     {
         var jsonoptions = new JsonSerializerOptions();
-        jsonoptions.Converters.Add(new PersonConverter(_publicKey, _privateKey));
+        jsonoptions.Converters.Add(new PersonConverter());
         var user = await request.ReadFromJsonAsync<Client>(jsonoptions);
+
+        user.Name = DecodeEncode.decrypt(user.Name, _privateKey);
+        user.Password = DecodeEncode.decrypt(user.Password, _privateKey);
 
         string ServerToken = user.Password.Split('|')[2];
         string ClientToken = user.Password.Split('|')[0];
@@ -311,7 +316,7 @@ async Task _SendMessages(ApplicationContext db, HttpResponse response, HttpReque
     try
     {
         var jsonoptions = new JsonSerializerOptions();
-        jsonoptions.Converters.Add(new MessageConverter(publickey, privatekey));
+        jsonoptions.Converters.Add(new MessageConverter());
         Message? message = await request.ReadFromJsonAsync<Message>(jsonoptions);
 
         if (message == null)
@@ -474,8 +479,11 @@ async Task _CheckMessages(ApplicationContext db, HttpResponse response, HttpRequ
     try
     {
         var jsonoptions = new JsonSerializerOptions();
-        jsonoptions.Converters.Add(new PersonConverter(_publicKey, _privateKey));
+        jsonoptions.Converters.Add(new PersonConverter());
         var client = await request.ReadFromJsonAsync<Client>(jsonoptions);
+
+        client.Name = DecodeEncode.decrypt(client.Name, _privateKey);
+        client.Password = DecodeEncode.decrypt(client.Password, _privateKey);
 
         if (client.Name == null)
         {
@@ -623,7 +631,7 @@ public class Datacell
 public class OperationConfurm
 {
     public int Id { get; set; }
-    public int operationId { get; set; }
+    public string operationId { get; set; }
     //0- регистрация, 1- авторизация, 2- отправка сообщения, 3- получение сообщений
     //4- отправка информации о сообщениях, 5- получение информации об отправленных сообщениях
     public string hashName { get; set; }
@@ -636,12 +644,12 @@ public class OperationConfurm
     }
     public bool CheckOperationId(string serverToken, string clientToken, int v)
     {
-        return operationId == v && confurmStringServer.Equals(serverToken) && confurmStringClient.Equals(clientToken);
+        return int.Parse(operationId) == v && confurmStringServer.Equals(serverToken) && confurmStringClient.Equals(clientToken);
     }
 
     public bool CheckCorrectOperation(int v, string hash, string clientToken, string enMessage)
     {
-        return operationId == v && hash.Equals(DecodeEncode.CreateMD5(clientToken + enMessage + confurmStringServer));
+        return int.Parse(operationId) == v && hash.Equals(DecodeEncode.CreateMD5(clientToken + enMessage + confurmStringServer));
     }
 }
 

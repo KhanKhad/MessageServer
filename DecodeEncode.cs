@@ -18,7 +18,6 @@ namespace MessageServer
             publicKey = _publicKey;
         }
 
-
         public string decrypt(string text)
         {
             byte[] cypherText = Convert.FromBase64String(text);
@@ -29,7 +28,16 @@ namespace MessageServer
                 return Encoding.UTF8.GetString(bytesText);
             }
         }
-
+        public static string decrypt(string text, string privateKey)
+        {
+            byte[] cypherText = Convert.FromBase64String(text);
+            using (var rsa = new RSACryptoServiceProvider())
+            {
+                rsa.FromXmlString(privateKey);
+                var bytesText = rsa.Decrypt(cypherText, false);
+                return Encoding.UTF8.GetString(bytesText);
+            }
+        }
         /*public string decrypt(string ToDecrypt)
         {
             try
