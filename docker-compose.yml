@@ -4,7 +4,7 @@ services:
   messageserver:
     image: ${DOCKER_REGISTRY-}messageserver
     ports:
-       - 5000:80
+       - 80:5000
     build:
       context: .
       dockerfile: Dockerfile
