@@ -30,8 +30,7 @@
       "launchUrl": "{Scheme}://{ServiceHost}:{ServicePort}",
       "publishAllPorts": true,
       "useSSL": false,
-      "httpPort":5000,
-      "sslPort": 80
+      "httpPort": 80
     }
   }
 }
