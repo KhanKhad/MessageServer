@@ -2,12 +2,13 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using MessageServer;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 
 List<Message> NeedToSendMessages = new List<Message>();
 
-
 var builder = WebApplication.CreateBuilder();
+
 
 // получаем строку подключения из файла конфигурации
 string connection = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -102,6 +103,27 @@ app.MapGet("/getuserkeypem", async (ApplicationContext db, HttpContext context) 
     // если пользователь найден, отправляем его
     return Results.Json(new { openkey = user.OpenKeyPem });
 });
+
+/*app.Map("/", async (context) =>
+{
+    context.Response.ContentType = "text/html; charset=utf-8";
+
+    // если обращение идет по адресу "/postuser", получаем данные формы
+    if (context.Request.Path == "/postuser")
+    {
+        var form = context.Request.Form;
+        string name = form["name"];
+        string age = form["age"];
+        await context.Response.WriteAsync($"<div><p>Name: {name}</p><p>Age: {age}</p></div>");
+    }
+    else
+    {
+        await context.Response.SendFileAsync("html/index.html");
+    }
+});*/
+
+
+
 
 app.Run();
 

@@ -3,15 +3,31 @@ version: '3.4'
 services:
   messageserver:
     image: ${DOCKER_REGISTRY-}messageserver
+    ports:
+       - 5000:80
     build:
       context: .
       dockerfile: Dockerfile
-      
+    links:
+       - pg_db
+    depends_on:
+       - "pg_db"
+    networks:
+       - mynetwork
+     
   pg_db:
     image: postgres
-    restart: unless-stopped
     container_name: users
-    env_file:
-      - .env
+    restart: always
+    environment:
+        POSTGRES_PASSWORD: shz788
+        POSTGRES_DB: messendbase
+        POSTGRES_HOST: users
     ports:
       - "0.0.0.0:5432:5432"
+    networks:
+      - mynetwork
+
+networks:
+  mynetwork:
+     driver: bridge
