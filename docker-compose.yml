@@ -3,6 +3,8 @@ version: '3.4'
 services:
   messageserver:
     image: ${DOCKER_REGISTRY-}messageserver
+    environment:
+    - ASPNETCORE_URLS=http://+:80
     ports:
        - 80:80
     build:
