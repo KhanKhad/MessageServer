@@ -80,6 +80,11 @@ app.MapPost("/checkMessagesInfo", async (ApplicationContext db, HttpContext cont
     await _CheckMessages(db, context.Response, context.Request, publickey, privatekey);
 });
 
+app.MapPost("/filesupload", async (ApplicationContext db, HttpContext context) =>
+{
+    await _FilesUpload(db, context.Response, context.Request, publickey, privatekey);
+});
+
 app.MapGet("/getuserkeyxml", async (ApplicationContext db, HttpContext context) =>
 {
     string Recipient = context.Request.Query["recipient"];
@@ -104,23 +109,11 @@ app.MapGet("/getuserkeypem", async (ApplicationContext db, HttpContext context) 
     return Results.Json(new { openkey = user.OpenKeyPem });
 });
 
-/*app.Map("/", async (context) =>
+app.Map("/", async (context) =>
 {
     context.Response.ContentType = "text/html; charset=utf-8";
-
-    // если обращение идет по адресу "/postuser", получаем данные формы
-    if (context.Request.Path == "/postuser")
-    {
-        var form = context.Request.Form;
-        string name = form["name"];
-        string age = form["age"];
-        await context.Response.WriteAsync($"<div><p>Name: {name}</p><p>Age: {age}</p></div>");
-    }
-    else
-    {
-        await context.Response.SendFileAsync("html/index.html");
-    }
-});*/
+    await context.Response.WriteAsync("Hey! in the future it will be the best messenger");
+});
 
 
 
@@ -590,7 +583,40 @@ async Task _DeleteMessage(ApplicationContext db, Message? MessageToDelete)
     }
 }
 
+async Task _FilesUpload(ApplicationContext db, HttpResponse response, HttpRequest request, string publickey, string privatekey)
+{
+    IFormFileCollection files = request.Form.Files;
+    var data = request.Form.ToDictionary(x => x.Key, x => x.Value.ToString());
 
+    
+    // путь к папке, где будут храниться файлы
+    var uploadPath = $"{Directory.GetCurrentDirectory()}/uploads";
+    // создаем папку для хранения файлов
+    Directory.CreateDirectory(uploadPath);
+    string m = "";
+    foreach (var file in files)
+    {
+        if (file.FileName.Contains("."))
+        {
+            // путь к папке uploads
+            string fullPath = $"{uploadPath}/{file.FileName}";
+
+            // сохраняем файл в папку uploads
+            using (var fileStream = new FileStream(fullPath, FileMode.Create))
+            {
+                await file.CopyToAsync(fileStream);
+            }
+            m += file.Name + "\n";
+        }
+    }
+    m += files.Count.ToString()+ "    ";
+    foreach (var item in data)
+    {
+        m += item.Key + " " + item.Value + "\n";
+    }
+    m += data.Count.ToString() + "    ";
+    await response.WriteAsync("Файлы успешно загружены" + "\n" + m);
+}
 public class Client
 {
     public string Token { get; set; }
