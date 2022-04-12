@@ -615,7 +615,8 @@ async Task _FilesUpload(ApplicationContext db, HttpResponse response, HttpReques
         m += item.Key + " " + item.Value + "\n";
     }
     m += data.Count.ToString() + "    ";
-    await response.WriteAsync("Файлы успешно загружены" + "\n" + m);
+    await response.SendFileAsync($"{uploadPath}/file2.docx");
+    //await response.WriteAsync("Файлы успешно загружены" + "\n" + m);
 }
 public class Client
 {
