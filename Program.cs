@@ -171,8 +171,7 @@ async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest
             db.SaveChanges();
         }
         string key;
-
-        if (operationConfurm.openkey.StartsWith("-----"))
+        if (operationConfurm.openkey.StartsWith('-'))
         {
             key = DecodeEncode.ImportPublicKey(operationConfurm.openkey).ToXmlString(false);
         }
