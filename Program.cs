@@ -179,7 +179,6 @@ async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest
         {
             key = operationConfurm.openkey;
         }
-        throw new Exception(key);
         string toClient = DecodeEncode.encrypt(operationConfurm.confurmStringClient + "|" + operationConfurm.confurmStringServer, key);   
         operationConfurm.openkey = Message.DefaultMessage;
         db.OperationConfurmTable.Add(operationConfurm);
