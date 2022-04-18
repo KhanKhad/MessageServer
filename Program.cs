@@ -170,7 +170,9 @@ async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest
             db.OperationConfurmTable.Remove(lastConfurm);
             db.SaveChanges();
         }
+        throw new Exception("213");
         string key;
+
         if (operationConfurm.openkey.StartsWith("-----"))
         {
             key = DecodeEncode.ImportPublicKey(operationConfurm.openkey).ToXmlString(false);
@@ -179,6 +181,7 @@ async Task _getConfurm(ApplicationContext db, HttpResponse response, HttpRequest
         {
             key = operationConfurm.openkey;
         }
+        throw new Exception(key);
         string toClient = DecodeEncode.encrypt(operationConfurm.confurmStringClient + "|" + operationConfurm.confurmStringServer, key);   
         operationConfurm.openkey = Message.DefaultMessage;
         db.OperationConfurmTable.Add(operationConfurm);
